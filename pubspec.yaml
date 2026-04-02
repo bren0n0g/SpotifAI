@@ -103,10 +103,8 @@ flutter_launcher_icons:
   ios: true
   image_path: "assets/images/logo_bw.png" # Caminho exato da sua imagem
   min_sdk_android: 21
-
-flutter_launcher_icons:
   web:
     generate: true
-    image_path: "assets/logo_bw.png" # Certifique-se de que sua logo está na pasta assets
+    image_path: "assets/images/logo_bw.png" # Certifique-se de que sua logo está na pasta assets
     background_color: "#000000"
     theme_color: "#1DB954"
