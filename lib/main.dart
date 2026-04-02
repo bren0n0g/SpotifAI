@@ -1,11 +1,18 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_dotenv/flutter_dotenv.dart'; // <-- Adicione isso
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:premium_ui_kit/premium_ui_kit.dart';
 import 'presentation/home/home_page.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await dotenv.load(fileName: ".env"); // <-- Carrega as chaves antes de tudo
+  
+  // Blindagem: Se o arquivo .env faltar na Cloudflare, o app avisa em vez de dar a Tela Cinza
+  try {
+    await dotenv.load(fileName: ".env"); 
+  } catch (e) {
+    debugPrint("⚠️ AVISO: Arquivo .env não encontrado. O Spotify pode falhar no login.");
+  }
+  
   runApp(const SpotifaiApp());
 }
 
@@ -18,10 +25,14 @@ class SpotifaiApp extends StatelessWidget {
       valueListenable: themeNotifier,
       builder: (context, currentMode, _) {
         return MaterialApp(
-          title: 'SpotifAI',
-          theme: ThemeData.light(), // Substitua pelo código do seu tema claro atual
-          darkTheme: ThemeData.dark(), // Substitua pelo código do seu tema escuro atual
-          themeMode: ThemeMode.system, // A MÁGICA ACONTECE AQUI
+          title: 'Spotifai',
+          debugShowCheckedModeBanner: false,
+          
+          // A sua arquitetura original restaurada:
+          theme: AppTheme.lightTheme,
+          darkTheme: AppTheme.darkTheme,
+          themeMode: currentMode,
+          
           home: const HomePage(),
         );
       },
