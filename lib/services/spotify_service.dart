@@ -4,6 +4,7 @@ import 'package:flutter_web_auth_2/flutter_web_auth_2.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'log_service.dart';
 import 'package:flutter/foundation.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class SpotifyService {
   static final SpotifyService _instance = SpotifyService._internal();
@@ -16,6 +17,35 @@ class SpotifyService {
   final String _apiBase = utf8.decode(base64Decode('aHR0cHM6Ly9hcGkuc3BvdGlmeS5jb20vdjE='));
   final String _accountsDomain = utf8.decode(base64Decode('YWNjb3VudHMuc3BvdGlmeS5jb20='));
 
+  // --- ADICIONADO: FUNÇÕES DE MEMÓRIA DO TOKEN ---
+  
+  // Salva o token no navegador
+  Future<void> saveToken(String token) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('spotify_token', token);
+  }
+
+  // Tenta puxar o token quando o app abre
+  Future<bool> loadSavedToken() async {
+    final prefs = await SharedPreferences.getInstance();
+    final token = prefs.getString('spotify_token');
+    if (token != null && token.isNotEmpty) {
+      _accessToken = token;
+      LogService().add('✅ SPOTIFY: Sessão restaurada da memória.');
+      return true;
+    }
+    return false;
+  }
+
+  // Apaga o token (Logout)
+  Future<void> clearToken() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove('spotify_token');
+    _accessToken = null;
+    LogService().add('⚠️ SPOTIFY: Sessão encerrada.');
+  }
+  // ------------------------------------------------
+
   Future<bool> authenticateUser() async {
     LogService().add('🔐 SPOTIFY: Iniciando fluxo de autenticação...');
     final clientId = dotenv.env['SPOTIFY_CLIENT_ID']!;
@@ -23,7 +53,7 @@ class SpotifyService {
     
     // O DESVIO INTELIGENTE: Se for Web, usa o localhost temporário. Se for Mobile, usa o .env
     final redirectUri = 'https://spotifai.brenomachado2003.workers.dev/callback.html';
-    
+
     final String scope = 'playlist-modify-public playlist-modify-private playlist-read-private user-read-private user-read-email';
     final url = Uri.https(_accountsDomain, '/authorize', {
       'client_id': clientId,
@@ -61,6 +91,10 @@ class SpotifyService {
       if (tokenResponse.statusCode == 200) {
         final jsonResponse = jsonDecode(tokenResponse.body);
         _accessToken = jsonResponse['access_token'];
+        
+        // --- ADICIONADO: Salva o token assim que logar com sucesso ---
+        await saveToken(_accessToken!);
+        
         LogService().add('✅ SPOTIFY: Autenticado com sucesso!');
         return true;
       } else {

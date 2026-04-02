@@ -1,8 +1,10 @@
+import 'dart:convert';
 import 'dart:ui';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:premium_ui_kit/premium_ui_kit.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:speech_to_text/speech_to_text.dart' as stt;
 import '../../services/spotify_service.dart';
 import '../../services/ai_service.dart';
@@ -13,6 +15,14 @@ class ChatMessage {
   final bool isUser;
   final bool isLog; 
   ChatMessage({required this.text, required this.isUser, this.isLog = false});
+
+  // --- ADICIONADO: Transformar para JSON ---
+  Map<String, dynamic> toJson() => {'text': text, 'isUser': isUser, 'isLog': isLog};
+  
+  // --- ADICIONADO: Ler de JSON ---
+  factory ChatMessage.fromJson(Map<String, dynamic> json) => ChatMessage(
+    text: json['text'], isUser: json['isUser'], isLog: json['isLog'] ?? false
+  );
 }
 
 class ChatConversation {
@@ -27,6 +37,20 @@ class ChatConversation {
     required this.messages,
     this.tracks = const [],
   });
+
+  // --- ADICIONADO: Transformar para JSON ---
+  Map<String, dynamic> toJson() => {
+    'id': id, 'title': title, 
+    'messages': messages.map((m) => m.toJson()).toList(),
+    'tracks': tracks
+  };
+
+  // --- ADICIONADO: Ler de JSON ---
+  factory ChatConversation.fromJson(Map<String, dynamic> json) => ChatConversation(
+    id: json['id'], title: json['title'],
+    messages: (json['messages'] as List).map((m) => ChatMessage.fromJson(m)).toList(),
+    tracks: json['tracks'] != null ? (json['tracks'] as List).map((t) => Map<String, String>.from(t)).toList() : []
+  );
 }
 
 class HomePage extends StatefulWidget {
@@ -64,6 +88,10 @@ class _HomePageState extends State<HomePage> {
       messages: []
     );
     _conversations.insert(0, _activeConversation);
+
+    // --- ADICIONADO: Tenta puxar a memória salva ao abrir o app ---
+    _loadHistory();
+    SpotifyService().loadSavedToken(); // <-- ADICIONE ESTA LINHA
 
     LogService().onNewLog = (String log) {
       if (mounted) {
@@ -107,6 +135,60 @@ class _HomePageState extends State<HomePage> {
     super.dispose();
   }
 
+  // --- ADICIONADO: FUNÇÕES DE MEMÓRIA (SHARED PREFERENCES) ---
+  Future<void> _saveHistory() async {
+    final prefs = await SharedPreferences.getInstance();
+    final String encodedData = jsonEncode(_conversations.map((c) => c.toJson()).toList());
+    await prefs.setString('spotifai_chats', encodedData);
+  }
+
+  Future<void> _loadHistory() async {
+    final prefs = await SharedPreferences.getInstance();
+    final String? savedData = prefs.getString('spotifai_chats');
+    
+    if (savedData != null && savedData.isNotEmpty) {
+      try {
+        List<dynamic> decodedData = jsonDecode(savedData);
+        setState(() {
+          _conversations.clear();
+          _conversations.addAll(decodedData.map((c) => ChatConversation.fromJson(c)).toList());
+          if (_conversations.isNotEmpty) {
+            _activeConversation = _conversations.first;
+          }
+        });
+        _scrollToBottom();
+      } catch (e) {
+        LogService().add('❌ ERRO ao carregar memória: $e');
+      }
+    }
+  }
+
+  void _clearCurrentConversation() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: Theme.of(context).cardColor,
+        title: const Text('Limpar conversa?'),
+        content: const Text('Isso apagará todo o histórico e a IA perderá o contexto atual.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancelar', style: TextStyle(color: Colors.grey))),
+          TextButton(
+            onPressed: () {
+              setState(() {
+                _activeConversation.messages.clear();
+                _activeConversation.tracks.clear();
+                _saveHistory(); // Salva a limpeza
+              });
+              Navigator.pop(context);
+            },
+            child: const Text('Apagar', style: TextStyle(color: Colors.redAccent)),
+          ),
+        ],
+      ),
+    );
+  }
+  // ------------------------------------------------------------
+
   void _toggleTheme() {
     themeNotifier.value = themeNotifier.value == ThemeMode.light ? ThemeMode.dark : ThemeMode.light;
   }
@@ -134,7 +216,6 @@ class _HomePageState extends State<HomePage> {
     if (url.isEmpty || _isLoading) return;
     FocusScope.of(context).unfocus();
 
-    // VALIDAÇÃO DE LOGIN ANTES DE IMPORTAR
     if (!SpotifyService().isLogged) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
         content: Text('❌ Conecte o Spotify no menu lateral antes de importar.'),
@@ -160,6 +241,7 @@ class _HomePageState extends State<HomePage> {
           isUser: false
         ));
         _isLoading = false;
+        _saveHistory(); // Salva a alteração
       });
       LogService().add('✅ SPOTIFAI: Curadoria concluída!');
       _scrollToBottom();
@@ -182,6 +264,7 @@ class _HomePageState extends State<HomePage> {
       _isLoading = true;
       _activeConversation.messages.add(ChatMessage(text: value, isUser: true));
       _searchController.clear();
+      _saveHistory(); // Salva a alteração
     });
     _scrollToBottom();
     LogService().add('👆 UI: Usuário enviou: "$value"');
@@ -253,6 +336,7 @@ class _HomePageState extends State<HomePage> {
           _activeConversation.tracks = newTracks;
           _activeConversation.title = playlistData['title'] ?? _activeConversation.title;
           _isLoading = false;
+          _saveHistory(); // Salva a alteração
         });
         
         LogService().add('✅ SPOTIFAI: Curadoria concluída!');
@@ -264,6 +348,7 @@ class _HomePageState extends State<HomePage> {
         setState(() {
           _activeConversation.messages.add(ChatMessage(text: 'Falha no sistema. Abra os logs.', isUser: false));
           _isLoading = false;
+          _saveHistory(); // Salva a alteração
         });
         LogService().add('✅ SPOTIFAI: Curadoria concluída!'); 
         _scrollToBottom();
@@ -274,7 +359,6 @@ class _HomePageState extends State<HomePage> {
   void _savePlaylist() async {
     if (_activeConversation.tracks.isEmpty || _isSaving) return;
     
-    // VALIDAÇÃO DE LOGIN ANTES DE SALVAR
     if (!SpotifyService().isLogged) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
         content: Text('❌ Conecte o Spotify no menu lateral antes de salvar.'),
@@ -326,6 +410,7 @@ class _HomePageState extends State<HomePage> {
       _conversations.insert(0, _activeConversation);
       _searchController.clear();
       _urlController.clear();
+      _saveHistory(); // Salva a criação da nova conversa
     });
     Navigator.pop(context);
   }
@@ -373,18 +458,13 @@ class _HomePageState extends State<HomePage> {
                 ),
               ),
               
-              // ... Fim do Expanded(child: AnimatedSwitcher(...)) ...
-              
-
-              // 1. O ESPAÇO AGORA VEM ANTES DA BARRA (Para desgrudar do chat de cima)
               const SizedBox(height: 16), 
 
-              // 2. A BARRA DE PROGRESSO (Sem o padding inferior grande, para grudar na caixa)
               AnimatedOpacity(
                 opacity: _loadingProgress > 0 ? 1.0 : 0.0,
                 duration: const Duration(milliseconds: 400),
                 child: Padding(
-                  padding: const EdgeInsets.only(left: 4, right: 4, bottom: 0), // bottom de 12 para 4
+                  padding: const EdgeInsets.only(left: 4, right: 4, bottom: 0),
                   child: Container(
                     height: 2,
                     width: double.infinity,
@@ -410,8 +490,7 @@ class _HomePageState extends State<HomePage> {
                 ),
               ),
 
-             
-              const SizedBox(height: 12), // ESPAÇO PARA DESGRUDAR O CHAT DA BARRA
+              const SizedBox(height: 12),
 
               Column(
                 children: [
@@ -517,7 +596,16 @@ class _HomePageState extends State<HomePage> {
                   ) 
                 : const SizedBox.shrink(key: ValueKey('appbar_title_empty')),
             ),
-            actions: [ThemeToggleButton(isDark: isDark, onToggle: _toggleTheme), const SizedBox(width: 8)],
+            actions: [
+              // --- ADICIONADO: Ícone da Lixeira na AppBar ---
+              if (hasStarted)
+                IconButton(
+                  icon: const Icon(CupertinoIcons.trash, color: Colors.redAccent),
+                  onPressed: _clearCurrentConversation,
+                ),
+              ThemeToggleButton(isDark: isDark, onToggle: _toggleTheme), 
+              const SizedBox(width: 8)
+            ],
           ),
         ),
       ),
@@ -686,6 +774,7 @@ class _HomePageState extends State<HomePage> {
                           onPressed: () {
                             setState(() {
                               track['locked'] = isLocked ? 'false' : 'true';
+                              _saveHistory(); // Salva a mudança do cadeado
                             });
                           },
                         )
@@ -769,6 +858,7 @@ class _HomePageState extends State<HomePage> {
     );
   }
 }
+
 
 class LogsPage extends StatelessWidget {
   const LogsPage({super.key});
