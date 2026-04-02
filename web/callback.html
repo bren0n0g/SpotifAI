@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Autenticação do SpotifAI</title>
+</head>
+<body>
+  <p>Conectado com sucesso! Retornando ao SpotifAI...</p>
+  <script>
+    var message = { 'flutter-web-auth-2': window.location.href };
+    
+    // Tenta o Plano A: Manda a mensagem direta se o navegador não tiver cortado a conexão
+    if (window.opener) {
+      window.opener.postMessage(message, "*");
+    } else {
+      // O Plano B (A Mágica): O navegador cortou o cordão.
+      // Então nós gravamos o token na memória. O Flutter está programado para detectar essa gravação!
+      localStorage.setItem('flutter-web-auth-2', window.location.href);
+    }
+    
+    // Finalmente, fecha a janela com segurança
+    window.close();
+  </script>
+</body>
+</html>
