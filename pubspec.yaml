@@ -107,4 +107,4 @@ flutter_launcher_icons:
     generate: true
     image_path: "assets/images/logo_bw.png" # Certifique-se de que sua logo está na pasta assets
     background_color: "#000000"
-    theme_color: "#1DB954"
+    theme_color: "#000000"
