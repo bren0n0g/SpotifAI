@@ -22,7 +22,7 @@ class SpotifaiApp extends StatelessWidget {
           theme: ThemeData.light(), // Substitua pelo código do seu tema claro atual
           darkTheme: ThemeData.dark(), // Substitua pelo código do seu tema escuro atual
           themeMode: ThemeMode.system, // A MÁGICA ACONTECE AQUI
-          home: const HomeScreen(),
+          home: HomeScreen(),
         );
       },
     );
