@@ -38,7 +38,7 @@ dependencies:
   cupertino_icons: ^1.0.8
   provider: ^6.1.2
   premium_ui_kit:
-    path: ../packages/premium_ui_kit
+    path: packages/premium_ui_kit
   speech_to_text: ^7.3.0
   flutter_web_auth_2: ^5.0.1
   http: ^1.6.0

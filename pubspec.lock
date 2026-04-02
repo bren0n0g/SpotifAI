@@ -459,7 +459,7 @@ packages:
   premium_ui_kit:
     dependency: "direct main"
     description:
-      path: "../premium_ui_kit"
+      path: "packages/premium_ui_kit"
       relative: true
     source: path
     version: "1.0.0"
