@@ -23,7 +23,7 @@ class SpotifyService {
     
     // O DESVIO INTELIGENTE: Se for Web, usa o localhost temporário. Se for Mobile, usa o .env
     final redirectUri = kIsWeb 
-        ? 'http://127.0.0.1:8080/callback.html' 
+        ? 'https://spotifai.brenomachado2003.workers.dev/callback.html' 
         : dotenv.env['SPOTIFY_REDIRECT_URI']!; 
 
     final String scope = 'playlist-modify-public playlist-modify-private playlist-read-private user-read-private user-read-email';

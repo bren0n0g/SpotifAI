@@ -8,7 +8,7 @@ class AiService {
   AiService._internal();
 
   // ⚠️ COLOQUE O LINK DO SEU WORKER AQUI (Sem barra / no final)
-  final String _workerUrl = 'https://spotifai-proxy.brenomachado2003.workers.dev/';
+  final String _workerUrl = 'https://spotifai-proxy.brenomachado2003.workers.dev';
 
   final String systemInstruction = '''
   Você é um curador musical especialista e um assistente conversacional.
