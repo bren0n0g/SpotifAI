@@ -22,10 +22,8 @@ class SpotifyService {
     final clientSecret = dotenv.env['SPOTIFY_CLIENT_SECRET']!;
     
     // O DESVIO INTELIGENTE: Se for Web, usa o localhost temporário. Se for Mobile, usa o .env
-    final redirectUri = kIsWeb 
-        ? 'https://spotifai.brenomachado2003.workers.dev/callback.html' 
-        : dotenv.env['SPOTIFY_REDIRECT_URI']!; 
-
+    final redirectUri = 'https://spotifai.brenomachado2003.workers.dev/callback.html';
+    
     final String scope = 'playlist-modify-public playlist-modify-private playlist-read-private user-read-private user-read-email';
     final url = Uri.https(_accountsDomain, '/authorize', {
       'client_id': clientId,
