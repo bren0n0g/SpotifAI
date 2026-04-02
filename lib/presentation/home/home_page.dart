@@ -125,6 +125,9 @@ class _HomePageState extends State<HomePage> {
         }
       }
     };
+    // Lê o brilho nativo do sistema e ajusta o pacote premium
+    final brightness = PlatformDispatcher.instance.platformBrightness;
+    themeNotifier.value = brightness == Brightness.dark ? ThemeMode.dark : ThemeMode.light;
   }
 
   @override
@@ -421,6 +424,42 @@ class _HomePageState extends State<HomePage> {
     _scrollToBottom();
   }
 
+  void _deleteConversation(ChatConversation conv) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: Theme.of(context).cardColor,
+        title: const Text('Apagar conversa?'),
+        content: Text('A curadoria "${conv.title}" será removida permanentemente.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancelar', style: TextStyle(color: Colors.grey))),
+          TextButton(
+            onPressed: () {
+              setState(() {
+                _conversations.remove(conv); // Remove da existência
+                
+                // Se apagou tudo, cria uma nova em branco
+                if (_conversations.isEmpty) {
+                  _activeConversation = ChatConversation(id: DateTime.now().millisecondsSinceEpoch.toString(), title: 'Nova Curadoria', messages: []);
+                  _conversations.add(_activeConversation);
+                } 
+                // Se apagou a que estava aberta, pula pra próxima
+                else if (_activeConversation.id == conv.id) {
+                  _activeConversation = _conversations.first;
+                }
+                
+                _saveHistory(); // Salva o novo estado no navegador
+              });
+              Navigator.pop(context); // Fecha o alerta
+              Navigator.pop(context); // Fecha o menu lateral
+            },
+            child: const Text('Apagar', style: TextStyle(color: Colors.redAccent)),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).extension<AppleKitColors>()!;
@@ -597,12 +636,6 @@ class _HomePageState extends State<HomePage> {
                 : const SizedBox.shrink(key: ValueKey('appbar_title_empty')),
             ),
             actions: [
-              // --- ADICIONADO: Ícone da Lixeira na AppBar ---
-              if (hasStarted)
-                IconButton(
-                  icon: const Icon(CupertinoIcons.trash, color: Colors.redAccent),
-                  onPressed: _clearCurrentConversation,
-                ),
               ThemeToggleButton(isDark: isDark, onToggle: _toggleTheme), 
               const SizedBox(width: 8)
             ],
@@ -643,6 +676,10 @@ class _HomePageState extends State<HomePage> {
                     selectedTileColor: isDark ? Colors.white.withOpacity(0.05) : Colors.black.withOpacity(0.05),
                     leading: Icon(CupertinoIcons.chat_bubble_2, color: isActive ? const Color(0xFF1DB954) : colors.frostedGlassText, size: 20),
                     title: Text(conv.title, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: isActive ? (isDark ? Colors.white : Colors.black) : colors.frostedGlassText, fontSize: 14, fontWeight: isActive ? FontWeight.bold : FontWeight.normal)),
+                    trailing: IconButton(
+                      icon: const Icon(CupertinoIcons.trash, color: Colors.redAccent, size: 18),
+                      onPressed: () => _deleteConversation(conv),
+                    ),
                     onTap: () => _switchConversation(conv),
                   );
                 },
