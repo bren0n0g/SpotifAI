@@ -36,6 +36,8 @@ class AiService {
       ]
     }
   }
+
+  O título deve ter até 17 dígitos + " SpotifAI"
   ''';
 
   Future<Map<String, dynamic>?> generatePlaylist(String prompt) async {
