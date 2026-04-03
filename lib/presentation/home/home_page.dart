@@ -416,31 +416,29 @@ class _HomePageState extends State<HomePage> {
             setState(() {
               String recognized = val.recognizedWords;
 
-              // O FILTRO MATEMÁTICO CIRÚRGICO (Apenas para Android no Navegador)
+              // O FILTRO MATEMÁTICO CIRÚRGICO
               if (kIsWeb && defaultTargetPlatform == TargetPlatform.android) {
-                // Se o texto novo começa com todo o lixo do texto antigo...
                 if (_lastPollutedText.isNotEmpty && recognized.startsWith(_lastPollutedText)) {
-                  // Nós cortamos o lixo fora! O que sobra é o que você acabou de falar.
                   String extracted = recognized.substring(_lastPollutedText.length);
                   _searchController.text = extracted;
                 } else {
                   _searchController.text = recognized;
                 }
-                _lastPollutedText = recognized; // Salva o novo lixo para o próximo corte
+                _lastPollutedText = recognized; 
               } else {
-                // iOS e PC funcionam perfeitamente por natureza, não precisam de filtro
                 _searchController.text = recognized;
               }
 
-              // Trava o cursor no final
               _searchController.selection = TextSelection.fromPosition(
                 TextPosition(offset: _searchController.text.length),
               );
             });
           }, 
           localeId: 'pt-BR',
-          listenMode: ListenMode.search, // Pede para o Chrome ser mais direto
-          cancelOnError: true,
+          // A NOVA CAIXA DE OPÇÕES DA VERSÃO ATUALIZADA:
+          listenOptions: stt.SpeechListenOptions(
+            cancelOnError: true,
+          ),
         );
       }
     } else {
@@ -448,7 +446,7 @@ class _HomePageState extends State<HomePage> {
       _speech.stop();
     }
   }
-  
+
   void _startNewConversation() {
     setState(() {
       _activeConversation = ChatConversation(id: DateTime.now().millisecondsSinceEpoch.toString(), title: 'Nova Curadoria', messages: []);
