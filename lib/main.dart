@@ -25,7 +25,7 @@ class SpotifaiApp extends StatelessWidget {
       valueListenable: themeNotifier,
       builder: (context, currentMode, _) {
         return MaterialApp(
-          title: 'Spotifai',
+          title: 'SpotifAI',
           debugShowCheckedModeBanner: false,
           
           // A sua arquitetura original restaurada:
