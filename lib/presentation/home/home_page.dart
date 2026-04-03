@@ -410,14 +410,14 @@ class _HomePageState extends State<HomePage> {
           onResult: (val) {
             setState(() {
               _searchController.text = val.recognizedWords;
-              // BLINDAGEM: Mantém o cursor sempre no final da frase para evitar bugs visuais
+              // Mantém o cursor no final para evitar falhas de digitação
               _searchController.selection = TextSelection.fromPosition(
                 TextPosition(offset: _searchController.text.length),
               );
             });
           }, 
-          // O SEGREDO DO PWA: Hífen em vez de underline!
           localeId: 'pt-BR',
+          partialResults: false, // <-- A CORREÇÃO CIRÚRGICA
         );
       }
     } else {
