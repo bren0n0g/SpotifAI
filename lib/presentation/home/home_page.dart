@@ -395,7 +395,9 @@ class _HomePageState extends State<HomePage> {
     if (!_isListening) {
       bool available = await _speech.initialize(
         onStatus: (val) { 
-          if (val == 'done' || val == 'notListening') setState(() => _isListening = false); 
+          if (val == 'done' || val == 'notListening') {
+            setState(() => _isListening = false); 
+          }
         },
         onError: (val) => setState(() => _isListening = false),
       );
@@ -417,7 +419,7 @@ class _HomePageState extends State<HomePage> {
             });
           }, 
           localeId: 'pt-BR',
-          partialResults: false, // <-- A CORREÇÃO CIRÚRGICA
+          cancelOnError: true, // <-- Evita que o mic fique travado no vermelho
         );
       }
     } else {
