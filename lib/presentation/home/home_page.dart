@@ -394,12 +394,31 @@ class _HomePageState extends State<HomePage> {
   void _listen() async {
     if (!_isListening) {
       bool available = await _speech.initialize(
-        onStatus: (val) { if (val == 'done' || val == 'notListening') setState(() => _isListening = false); },
+        onStatus: (val) { 
+          if (val == 'done' || val == 'notListening') setState(() => _isListening = false); 
+        },
         onError: (val) => setState(() => _isListening = false),
       );
+      
       if (available) {
-        setState(() { _isListening = true; _searchController.clear(); });
-        _speech.listen(onResult: (val) => setState(() => _searchController.text = val.recognizedWords), localeId: 'pt_BR');
+        setState(() { 
+          _isListening = true; 
+          _searchController.clear(); 
+        });
+        
+        _speech.listen(
+          onResult: (val) {
+            setState(() {
+              _searchController.text = val.recognizedWords;
+              // BLINDAGEM: Mantém o cursor sempre no final da frase para evitar bugs visuais
+              _searchController.selection = TextSelection.fromPosition(
+                TextPosition(offset: _searchController.text.length),
+              );
+            });
+          }, 
+          // O SEGREDO DO PWA: Hífen em vez de underline!
+          localeId: 'pt-BR',
+        );
       }
     } else {
       setState(() => _isListening = false);
