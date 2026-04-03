@@ -9,6 +9,7 @@ import 'package:speech_to_text/speech_to_text.dart' as stt;
 import '../../services/spotify_service.dart';
 import '../../services/ai_service.dart';
 import '../../services/log_service.dart';
+import 'package:flutter/foundation.dart'; // <-- Adicione lá no topo
 
 class ChatMessage {
   final String text;
@@ -70,6 +71,7 @@ class _HomePageState extends State<HomePage> {
   bool _isSaving = false;
   bool _showLogsInChat = false; 
   double _loadingProgress = 0.0;
+  String _lastPollutedText = ""; // O nosso lixeiro de memória
 
   late stt.SpeechToText _speech;
 
@@ -406,20 +408,39 @@ class _HomePageState extends State<HomePage> {
         setState(() { 
           _isListening = true; 
           _searchController.clear(); 
+          _lastPollutedText = ""; // Zera o lixeiro sempre que ligar o mic
         });
         
         _speech.listen(
           onResult: (val) {
             setState(() {
-              _searchController.text = val.recognizedWords;
-              // Mantém o cursor no final para evitar falhas de digitação
+              String recognized = val.recognizedWords;
+
+              // O FILTRO MATEMÁTICO CIRÚRGICO (Apenas para Android no Navegador)
+              if (kIsWeb && defaultTargetPlatform == TargetPlatform.android) {
+                // Se o texto novo começa com todo o lixo do texto antigo...
+                if (_lastPollutedText.isNotEmpty && recognized.startsWith(_lastPollutedText)) {
+                  // Nós cortamos o lixo fora! O que sobra é o que você acabou de falar.
+                  String extracted = recognized.substring(_lastPollutedText.length);
+                  _searchController.text = extracted;
+                } else {
+                  _searchController.text = recognized;
+                }
+                _lastPollutedText = recognized; // Salva o novo lixo para o próximo corte
+              } else {
+                // iOS e PC funcionam perfeitamente por natureza, não precisam de filtro
+                _searchController.text = recognized;
+              }
+
+              // Trava o cursor no final
               _searchController.selection = TextSelection.fromPosition(
                 TextPosition(offset: _searchController.text.length),
               );
             });
           }, 
           localeId: 'pt-BR',
-          cancelOnError: true, // <-- Evita que o mic fique travado no vermelho
+          listenMode: ListenMode.search, // Pede para o Chrome ser mais direto
+          cancelOnError: true,
         );
       }
     } else {
@@ -427,7 +448,7 @@ class _HomePageState extends State<HomePage> {
       _speech.stop();
     }
   }
-
+  
   void _startNewConversation() {
     setState(() {
       _activeConversation = ChatConversation(id: DateTime.now().millisecondsSinceEpoch.toString(), title: 'Nova Curadoria', messages: []);
