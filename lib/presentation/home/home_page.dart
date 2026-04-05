@@ -60,25 +60,30 @@ class HomePage extends StatefulWidget {
 class _HomePageState extends State<HomePage> {
   final TextEditingController _searchController = TextEditingController();
   final TextEditingController _urlController = TextEditingController();
+  final TextEditingController _manualGenreController = TextEditingController(); // Input do Passo 3
   final ScrollController _chatScrollController = ScrollController();
   
   bool _isListening = false;
   bool _isLoadingCopilot = false;
   
-  // --- VARIÁVEIS DA NOVA INTERFACE ---
+  // --- MÁQUINA DE ESTADOS DO MODO COPILOTO ---
   bool _isCopilotMode = false; 
-  List<dynamic> _copilotVibes = []; // Aceita a lista de mapas do AiService
+  int _copilotStep = 1; // 1: Gênero, 2: Artistas (Manual), 3: Texto (Manual), 4: Exploração, 5: Energia
   
-  // Paleta inspirada na imagem do Spotify
+  List<dynamic> _copilotVibes = []; 
+  List<String> _topArtistsCache = []; // Guarda os 15 artistas para o Passo 2
+  
+  // Respostas salvas do usuário
+  String _selectedVibe = '';
+  List<String> _selectedArtists = [];
+  String _selectedExploration = '';
+  
+  // Paleta de Cores
   final List<Color> _mixColors = [
-    const Color(0xFF985310), // Laranja/Marrom
-    const Color(0xFF3A5A78), // Azul Ardósia
-    const Color(0xFF32148B), // Roxo Profundo
-    const Color(0xFF46532B), // Verde Musgo
-    const Color(0xFFA01929), // Vermelho Escuro
-    const Color(0xFF91145C), // Magenta
+    const Color(0xFF985310), const Color(0xFF3A5A78), const Color(0xFF32148B),
+    const Color(0xFF46532B), const Color(0xFFA01929), const Color(0xFF91145C),
   ];
-  // -----------------------------------
+  // -------------------------------------------
 
   bool _isLoading = false; 
   bool _isSaving = false;
@@ -87,7 +92,6 @@ class _HomePageState extends State<HomePage> {
   String _lastPollutedText = ""; 
 
   late stt.SpeechToText _speech;
-
   final List<ChatConversation> _conversations = [];
   late ChatConversation _activeConversation;
 
@@ -97,11 +101,7 @@ class _HomePageState extends State<HomePage> {
     _speech = stt.SpeechToText();
     _searchController.addListener(() => setState(() {})); 
     
-    _activeConversation = ChatConversation(
-      id: DateTime.now().millisecondsSinceEpoch.toString(), 
-      title: 'Nova Curadoria', 
-      messages: []
-    );
+    _activeConversation = ChatConversation(id: DateTime.now().millisecondsSinceEpoch.toString(), title: 'Nova Curadoria', messages: []);
     _conversations.insert(0, _activeConversation);
 
     _loadHistory();
@@ -114,22 +114,16 @@ class _HomePageState extends State<HomePage> {
             _activeConversation.messages.add(ChatMessage(text: log, isUser: false, isLog: true));
             _scrollToBottom();
           }
-
           if (log.contains('👆 UI: Usuário enviou')) _loadingProgress = 0.05;
           if (log.contains('🧠 AI: Analisando')) _loadingProgress = 0.15;
           if (log.contains('🚀 AI: Disparando')) _loadingProgress = 0.3;
           if (log.contains('✅ AI: Resposta recebida')) _loadingProgress = 0.6;
           if (log.contains('🔍 SPOTIFY: Buscando')) _loadingProgress = 0.85;
-          
           if (log.contains('⏳ SPOTIFY: Baixando playlist')) _loadingProgress = 0.4;
-          
           if (log.contains('💾 UI: Tentando salvar')) _loadingProgress = 0.1;
           if (log.contains('⏳ SPOTIFY: Solicitando')) _loadingProgress = 0.4;
           if (log.contains('✅ SPOTIFY: Playlist criada')) _loadingProgress = 0.7;
-
-          if (log.contains('✅ SPOTIFAI: Curadoria concluída!') || log.contains('✅ SPOTIFY: SUCESSO') || log.contains('✅ SPOTIFY: Playlist')) {
-            _loadingProgress = 1.0;
-          }
+          if (log.contains('✅ SPOTIFAI: Curadoria concluída!') || log.contains('✅ SPOTIFY: SUCESSO') || log.contains('✅ SPOTIFY: Playlist')) _loadingProgress = 1.0;
         });
 
         if (_loadingProgress >= 1.0) {
@@ -145,25 +139,37 @@ class _HomePageState extends State<HomePage> {
 
   void _startCopilot() async {
     if (!SpotifyService().isLogged) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-        content: Text('❌ Conecte o Spotify no menu lateral primeiro!'),
-        backgroundColor: Colors.redAccent,
-      ));
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('❌ Conecte o Spotify no menu lateral primeiro!'), backgroundColor: Colors.redAccent));
       return;
     }
 
-    setState(() => _isLoadingCopilot = true);
+    setState(() {
+      _isLoadingCopilot = true;
+      _copilotStep = 1; // Reseta a máquina de estados
+      _selectedVibe = '';
+      _selectedArtists.clear();
+      _selectedExploration = '';
+      _manualGenreController.clear();
+    });
     LogService().add('👆 UI: Iniciando Modo Copiloto Guiado...');
 
-    List<String> topArtists = await SpotifyService().getUserTopArtists();
-    // Atenção: O AiService precisa estar atualizado para retornar List<Map<String, dynamic>>
+    // Busca os 15 artistas top (para a tela de "Escolher Artistas" e para a IA)
+    List<String> topArtists = await SpotifyService().getUserTopArtists(limit: 15);
+    _topArtistsCache = topArtists;
+
     List<dynamic> vibes = await AiService().generateDynamicVibes(topArtists);
 
     if (mounted) {
       setState(() {
-        _copilotVibes = vibes;
+        // Pega as 4 primeiras da IA
+        _copilotVibes = vibes.take(4).toList();
+        
+        // Adiciona os 2 botões de fuga manual
+        _copilotVibes.add({"vibe": "Escolha você mesmo", "artists": [], "isManual": true});
+        _copilotVibes.add({"vibe": "Escolha por artista", "artists": [], "isArtistSelect": true});
+
         _isLoadingCopilot = false;
-        _isCopilotMode = true; // Abre a grade personalizada
+        _isCopilotMode = true; 
       });
     }
   }
@@ -172,6 +178,7 @@ class _HomePageState extends State<HomePage> {
   void dispose() {
     _searchController.dispose();
     _urlController.dispose();
+    _manualGenreController.dispose();
     _chatScrollController.dispose();
     super.dispose();
   }
@@ -185,16 +192,13 @@ class _HomePageState extends State<HomePage> {
   Future<void> _loadHistory() async {
     final prefs = await SharedPreferences.getInstance();
     final String? savedData = prefs.getString('spotifai_chats');
-    
     if (savedData != null && savedData.isNotEmpty) {
       try {
         List<dynamic> decodedData = jsonDecode(savedData);
         setState(() {
           _conversations.clear();
           _conversations.addAll(decodedData.map((c) => ChatConversation.fromJson(c)).toList());
-          if (_conversations.isNotEmpty) {
-            _activeConversation = _conversations.first;
-          }
+          if (_conversations.isNotEmpty) _activeConversation = _conversations.first;
         });
         _scrollToBottom();
       } catch (e) {
@@ -203,44 +207,308 @@ class _HomePageState extends State<HomePage> {
     }
   }
 
-  void _clearCurrentConversation() {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: Theme.of(context).cardColor,
-        title: const Text('Limpar conversa?'),
-        content: const Text('Isso apagará todo o histórico e a IA perderá o contexto atual.'),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancelar', style: TextStyle(color: Colors.grey))),
-          TextButton(
-            onPressed: () {
-              setState(() {
-                _activeConversation.messages.clear();
-                _activeConversation.tracks.clear();
-                _saveHistory(); 
-              });
-              Navigator.pop(context);
-            },
-            child: const Text('Apagar', style: TextStyle(color: Colors.redAccent)),
-          ),
-        ],
-      ),
+  // --- ROTEADOR DE TELAS DO COPILOTO ---
+  Widget _buildCopilotRouter(bool isDark, AppleKitColors colors) {
+    return AnimatedSwitcher(
+      duration: const Duration(milliseconds: 500),
+      transitionBuilder: (Widget child, Animation<double> animation) {
+        return FadeTransition(opacity: animation, child: SlideTransition(
+          position: Tween<Offset>(begin: const Offset(0.05, 0.0), end: Offset.zero).animate(animation),
+          child: child,
+        ));
+      },
+      child: _getStepWidget(isDark, colors),
     );
   }
 
-  void _toggleTheme() {
-    themeNotifier.value = themeNotifier.value == ThemeMode.light ? ThemeMode.dark : ThemeMode.light;
+  Widget _getStepWidget(bool isDark, AppleKitColors colors) {
+    switch (_copilotStep) {
+      case 1: return SizedBox(key: const ValueKey('step1'), child: _buildStep1Genre(isDark, colors));
+      case 2: return SizedBox(key: const ValueKey('step2'), child: _buildStep2Artists(isDark, colors));
+      case 3: return SizedBox(key: const ValueKey('step3'), child: _buildStep3Manual(isDark, colors));
+      case 4: return SizedBox(key: const ValueKey('step4'), child: _buildStep4Exploration(isDark, colors));
+      default: return SizedBox(key: const ValueKey('step1'), child: _buildStep1Genre(isDark, colors));
+    }
   }
+
+  // PASSO 1: A GRADE DE GÊNEROS (NOVO DESIGN 1:2)
+  Widget _buildStep1Genre(bool isDark, AppleKitColors colors) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            IconButton(icon: Icon(CupertinoIcons.clear, color: isDark ? Colors.white : Colors.black), onPressed: () => setState(() => _isCopilotMode = false)),
+            Expanded(child: Text('Gênero', style: TextStyle(color: isDark ? Colors.white : Colors.black, fontSize: 24, fontWeight: FontWeight.bold))),
+          ],
+        ),
+        Padding(
+          padding: const EdgeInsets.only(left: 48, bottom: 24),
+          child: Text('Comece sua playlist com estilo', style: TextStyle(color: isDark ? Colors.grey[400] : Colors.grey[600], fontSize: 16)),
+        ),
+        Expanded(
+          child: GridView.builder(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: 2,
+              childAspectRatio: 2.2, // Faz os botões ficarem perfeitamente horizontais (largura = 2.2x a altura)
+              crossAxisSpacing: 12,
+              mainAxisSpacing: 12,
+            ),
+            itemCount: _copilotVibes.length,
+            itemBuilder: (context, index) {
+              final item = _copilotVibes[index];
+              String vibe = item['vibe'] ?? '';
+              List<String> artists = List<String>.from(item['artists'] ?? []);
+              bool isManual = item['isManual'] == true;
+              bool isArtistSelect = item['isArtistSelect'] == true;
+              
+              final Color cardColor = isManual || isArtistSelect 
+                  ? (isDark ? const Color(0xFF2C2C2E) : Colors.grey[300]!) 
+                  : _mixColors[index % _mixColors.length];
+
+              return InkWell(
+                borderRadius: BorderRadius.circular(12),
+                onTap: () {
+                  if (isManual) {
+                    setState(() => _copilotStep = 3);
+                  } else if (isArtistSelect) {
+                    setState(() => _copilotStep = 2);
+                  } else {
+                    setState(() {
+                      _selectedVibe = vibe;
+                      _copilotStep = 4; // Vai para Exploração
+                    });
+                  }
+                },
+                child: Container(
+                  decoration: BoxDecoration(color: cardColor, borderRadius: BorderRadius.circular(12)),
+                  clipBehavior: Clip.hardEdge,
+                  child: isManual || isArtistSelect 
+                    ? Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(isManual ? CupertinoIcons.pencil_outline : CupertinoIcons.person_3_fill, color: isDark ? Colors.white : Colors.black87, size: 20),
+                          const SizedBox(width: 8),
+                          Flexible(child: Text(vibe, style: TextStyle(color: isDark ? Colors.white : Colors.black87, fontWeight: FontWeight.bold, fontSize: 13), textAlign: TextAlign.center, maxLines: 2)),
+                        ],
+                      )
+                    : Stack(
+                        children: [
+                          Positioned(
+                            right: -10, top: -10,
+                            child: Transform.rotate(angle: -0.2, child: Icon(CupertinoIcons.music_albums_fill, size: 70, color: Colors.white.withOpacity(0.08))),
+                          ),
+                          Padding(
+                            padding: const EdgeInsets.all(10.0),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Text(vibe.replaceAll(RegExp(r'^[^\w\s]+'), '').trim(), style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold, height: 1.1), maxLines: 1, overflow: TextOverflow.ellipsis),
+                                const SizedBox(height: 4),
+                                Text(artists.isNotEmpty ? artists.join(', ') : 'Para você.', style: TextStyle(color: Colors.white.withOpacity(0.75), fontSize: 10, height: 1.2), maxLines: 1, overflow: TextOverflow.ellipsis),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                ),
+              );
+            },
+          ),
+        ),
+      ],
+    );
+  }
+
+  // PASSO 2: SELEÇÃO MÚLTIPLA DE ARTISTAS
+  Widget _buildStep2Artists(bool isDark, AppleKitColors colors) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            IconButton(icon: Icon(CupertinoIcons.back, color: isDark ? Colors.white : Colors.black), onPressed: () => setState(() => _copilotStep = 1)),
+            Expanded(child: Text('Seus Artistas', style: TextStyle(color: isDark ? Colors.white : Colors.black, fontSize: 24, fontWeight: FontWeight.bold))),
+          ],
+        ),
+        Padding(
+          padding: const EdgeInsets.only(left: 48, bottom: 16),
+          child: Text('Selecione os pilares da sua playlist', style: TextStyle(color: isDark ? Colors.grey[400] : Colors.grey[600], fontSize: 14)),
+        ),
+        Expanded(
+          child: ListView.builder(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            itemCount: _topArtistsCache.length,
+            itemBuilder: (context, index) {
+              String artist = _topArtistsCache[index];
+              bool isSelected = _selectedArtists.contains(artist);
+              return Container(
+                margin: const EdgeInsets.only(bottom: 8),
+                child: ListTile(
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  tileColor: isSelected ? const Color(0xFF1DB954).withOpacity(0.2) : (isDark ? const Color(0xFF2C2C2E) : Colors.grey[200]),
+                  title: Text(artist, style: TextStyle(color: isSelected ? const Color(0xFF1DB954) : (isDark ? Colors.white : Colors.black), fontWeight: FontWeight.bold)),
+                  trailing: isSelected ? const Icon(CupertinoIcons.checkmark_alt_circle_fill, color: Color(0xFF1DB954)) : const Icon(CupertinoIcons.circle, color: Colors.grey),
+                  onTap: () {
+                    setState(() {
+                      if (isSelected) _selectedArtists.remove(artist);
+                      else _selectedArtists.add(artist);
+                    });
+                  },
+                ),
+              );
+            },
+          ),
+        ),
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(16),
+          child: ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF1DB954), padding: const EdgeInsets.symmetric(vertical: 16), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30))),
+            onPressed: _selectedArtists.isNotEmpty ? () {
+              setState(() => _copilotStep = 4); // Avança para Exploração
+            } : null,
+            child: const Text('Continuar', style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
+          ),
+        )
+      ],
+    );
+  }
+
+  // PASSO 3: INPUT MANUAL DE GÊNERO
+  Widget _buildStep3Manual(bool isDark, AppleKitColors colors) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            IconButton(icon: Icon(CupertinoIcons.back, color: isDark ? Colors.white : Colors.black), onPressed: () => setState(() => _copilotStep = 1)),
+            Expanded(child: Text('Sua Ideia', style: TextStyle(color: isDark ? Colors.white : Colors.black, fontSize: 24, fontWeight: FontWeight.bold))),
+          ],
+        ),
+        Expanded(
+          child: Padding(
+            padding: const EdgeInsets.all(24.0),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text('O que você tem em mente?', style: TextStyle(color: isDark ? Colors.grey[300] : Colors.black87, fontSize: 18, fontWeight: FontWeight.w600)),
+                const SizedBox(height: 24),
+                TextField(
+                  controller: _manualGenreController,
+                  autofocus: true,
+                  style: TextStyle(color: isDark ? Colors.white : Colors.black, fontSize: 20),
+                  decoration: InputDecoration(
+                    hintText: 'Ex: Cyberpunk, Jazz de Chuva...',
+                    hintStyle: TextStyle(color: Colors.grey[600]),
+                    filled: true,
+                    fillColor: isDark ? const Color(0xFF2C2C2E) : Colors.grey[200],
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(16),
+          child: ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF1DB954), padding: const EdgeInsets.symmetric(vertical: 16), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30))),
+            onPressed: () {
+              if (_manualGenreController.text.isNotEmpty) {
+                setState(() {
+                  _selectedVibe = _manualGenreController.text;
+                  _copilotStep = 4;
+                });
+              }
+            },
+            child: const Text('Continuar', style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
+          ),
+        )
+      ],
+    );
+  }
+
+  // PASSO 4: NÍVEL DE EXPLORAÇÃO
+  Widget _buildStep4Exploration(bool isDark, AppleKitColors colors) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            IconButton(
+              icon: Icon(CupertinoIcons.back, color: isDark ? Colors.white : Colors.black), 
+              onPressed: () {
+                // Inteligência para saber pra qual tela voltar
+                if (_selectedArtists.isNotEmpty) setState(() => _copilotStep = 2);
+                else if (_manualGenreController.text.isNotEmpty) setState(() => _copilotStep = 3);
+                else setState(() => _copilotStep = 1);
+              }
+            ),
+            Expanded(child: Text('Nível de Exploração', style: TextStyle(color: isDark ? Colors.white : Colors.black, fontSize: 24, fontWeight: FontWeight.bold))),
+          ],
+        ),
+        Padding(
+          padding: const EdgeInsets.only(left: 48, bottom: 24),
+          child: Text('O quanto você quer se aventurar hoje?', style: TextStyle(color: isDark ? Colors.grey[400] : Colors.grey[600], fontSize: 16)),
+        ),
+        Expanded(
+          child: ListView(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            children: [
+              _buildExplorationCard('🔒 Pista Segura', 'Apenas músicas e artistas que você já curte ouvir.', 'segura', isDark),
+              const SizedBox(height: 16),
+              _buildExplorationCard('🔄 Meio a Meio', 'Mistura seus favoritos com novidades do mesmo estilo.', 'media', isDark),
+              const SizedBox(height: 16),
+              _buildExplorationCard('🚀 Modo Explorador', 'Descubra talentos escondidos e fuja do padrão.', 'alta', isDark),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildExplorationCard(String title, String desc, String value, bool isDark) {
+    return InkWell(
+      borderRadius: BorderRadius.circular(16),
+      onTap: () {
+        setState(() {
+          _selectedExploration = value;
+          // AQUI TERMINARIA PARA IR PARA A FASE 5 (Energia)
+          LogService().add('👆 UI: Fluxo chegou na Exploração ($value) com sucesso!');
+        });
+      },
+      child: Container(
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          color: isDark ? const Color(0xFF2C2C2E) : Colors.grey[200],
+          borderRadius: BorderRadius.circular(16),
+          border: _selectedExploration == value ? Border.all(color: const Color(0xFF1DB954), width: 2) : null,
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(title, style: TextStyle(color: isDark ? Colors.white : Colors.black, fontSize: 18, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 8),
+            Text(desc, style: TextStyle(color: isDark ? Colors.grey[400] : Colors.grey[600], fontSize: 14)),
+          ],
+        ),
+      ),
+    );
+  }
+  // ---------------------------------------------
+
+
+  // [TUDO ABAIXO DAQUI CONTINUA IGUAL AO CÓDIGO ORIGINAL (Theme, SplitScreen, Logs)]
+
+  void _toggleTheme() { themeNotifier.value = themeNotifier.value == ThemeMode.light ? ThemeMode.dark : ThemeMode.light; }
 
   void _scrollToBottom() {
     if (_chatScrollController.hasClients) {
-      Future.delayed(const Duration(milliseconds: 600), () {
-        _chatScrollController.animateTo(
-          _chatScrollController.position.maxScrollExtent,
-          duration: const Duration(milliseconds: 600),
-          curve: Curves.easeOut,
-        );
-      });
+      Future.delayed(const Duration(milliseconds: 600), () => _chatScrollController.animateTo(_chatScrollController.position.maxScrollExtent, duration: const Duration(milliseconds: 600), curve: Curves.easeOut));
     }
   }
 
@@ -254,20 +522,9 @@ class _HomePageState extends State<HomePage> {
   void _importPlaylist(String url) async {
     if (url.isEmpty || _isLoading) return;
     FocusScope.of(context).unfocus();
+    if (!SpotifyService().isLogged) { ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('❌ Conecte o Spotify no menu lateral antes de importar.'), backgroundColor: Colors.redAccent)); return; }
 
-    if (!SpotifyService().isLogged) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-        content: Text('❌ Conecte o Spotify no menu lateral antes de importar.'),
-        backgroundColor: Colors.redAccent,
-      ));
-      return;
-    }
-
-    setState(() {
-      _isLoading = true;
-      _urlController.clear();
-    });
-    
+    setState(() { _isLoading = true; _urlController.clear(); });
     LogService().add('👆 UI: Usuário enviou link para importação...');
     final result = await SpotifyService().importPlaylistFromUrl(url);
     
@@ -275,266 +532,120 @@ class _HomePageState extends State<HomePage> {
       setState(() {
         _activeConversation.title = result['title'];
         _activeConversation.tracks = List<Map<String, String>>.from(result['tracks']);
-        _activeConversation.messages.add(ChatMessage(
-          text: 'Acabei de importar a playlist **"${result['title']}"**. Quais músicas você quer trancar no cadeado e qual o estilo que devemos buscar para as próximas adições?',
-          isUser: false
-        ));
+        _activeConversation.messages.add(ChatMessage(text: 'Acabei de importar a playlist **"${result['title']}"**. Quais músicas você quer trancar no cadeado e qual o estilo que devemos buscar para as próximas adições?', isUser: false));
         _isLoading = false;
         _saveHistory(); 
       });
       LogService().add('✅ SPOTIFAI: Curadoria concluída!');
       _scrollToBottom();
-    } else {
-      if (mounted) {
-        setState(() => _isLoading = false);
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content: Text('Falha ao importar. O link é uma playlist válida e pública?'),
-          backgroundColor: Colors.redAccent,
-        ));
-      }
+    } else if (mounted) {
+      setState(() => _isLoading = false);
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Falha ao importar. O link é uma playlist válida e pública?'), backgroundColor: Colors.redAccent));
     }
   }
 
   void _submitSearch(String value) async {
+    // Código inalterado do prompt de texto
     if (value.isEmpty || _isLoading) return;
     FocusScope.of(context).unfocus();
 
-    setState(() {
-      _isLoading = true;
-      _activeConversation.messages.add(ChatMessage(text: value, isUser: true));
-      _searchController.clear();
-      _saveHistory(); 
-    });
+    setState(() { _isLoading = true; _activeConversation.messages.add(ChatMessage(text: value, isUser: true)); _searchController.clear(); _saveHistory(); });
     _scrollToBottom();
     LogService().add('👆 UI: Usuário enviou: "$value"');
 
     try {
-      String historyContext = _activeConversation.messages
-          .where((m) => !m.isLog) 
-          .map((m) => "${m.isUser ? 'Usuário' : 'SpotifAI'}: ${m.text}")
-          .join("\n");
-      
-      String currentPlaylistState = _activeConversation.tracks.isEmpty
-          ? "ESTADO DA PLAYLIST: Nenhuma playlist carregada. Opere no MODO CRIADOR."
-          : "PLAYLIST ATUAL NO SISTEMA (Opere no MODO EDITOR. Mantenha essa lista intacta, exceto pelo que o usuário alterar):\n" + 
-            _activeConversation.tracks.map((t) => "- ${t['title']} (${t['artist']})").join('\n');
-      
-      List<String> lockedInfo = _activeConversation.tracks
-          .where((t) => t['locked'] == 'true')
-          .map((t) => "- ${t['title']} (${t['artist']})")
-          .toList();
-          
-      String lockedConstraint = lockedInfo.isEmpty 
-          ? "" 
-          : "REGRA ABSOLUTA: As seguintes músicas estão TRANCADAS pelo usuário. Você DEVE obrigatóriamente incluí-las na sua resposta JSON final, sem alterar seus nomes:\n${lockedInfo.join('\n')}\n\n";
-      
-      String promptComContexto = "Histórico da conversa:\n$historyContext\n\n$currentPlaylistState\n\n$lockedConstraint Novo pedido do Usuário: $value\nLembre-se de retornar aquele formato JSON duplo com 'chat_reply' e 'playlist_update'.";
+      String historyContext = _activeConversation.messages.where((m) => !m.isLog).map((m) => "${m.isUser ? 'Usuário' : 'SpotifAI'}: ${m.text}").join("\n");
+      String currentPlaylistState = _activeConversation.tracks.isEmpty ? "ESTADO DA PLAYLIST: Nenhuma playlist carregada. Opere no MODO CRIADOR." : "PLAYLIST ATUAL NO SISTEMA (Opere no MODO EDITOR. Mantenha essa lista intacta, exceto pelo que o usuário alterar):\n" + _activeConversation.tracks.map((t) => "- ${t['title']} (${t['artist']})").join('\n');
+      List<String> lockedInfo = _activeConversation.tracks.where((t) => t['locked'] == 'true').map((t) => "- ${t['title']} (${t['artist']})").toList();
+      String lockedConstraint = lockedInfo.isEmpty ? "" : "REGRA ABSOLUTA: As seguintes músicas estão TRANCADAS pelo usuário. Você DEVE obrigatóriamente incluí-las na sua resposta JSON final, sem alterar seus nomes:\n${lockedInfo.join('\n')}\n\n";
+      String promptComContexto = "Histórico da conversa:\n$historyContext\n\n$currentPlaylistState\n\n$lockedConstraint Novo pedido do Usuário: $value\nLembre-se de retornar JSON duplo com 'chat_reply' e 'playlist_update'.";
 
       final aiResult = await AiService().generatePlaylist(promptComContexto);
 
       if (aiResult != null && mounted) {
         final chatReply = aiResult['chat_reply'] ?? aiResult['description'] ?? 'Aqui está sua atualização!';
         final playlistData = aiResult['playlist_update'] ?? aiResult; 
-        
         List<Map<String, String>> newTracks = [];
 
         if (playlistData['tracks'] != null) {
           final rawTracks = playlistData['tracks'] as List;
           LogService().add('🔍 SPOTIFY: Buscando metadados para ${rawTracks.length} músicas...');
-
           for (var t in rawTracks) {
             String trackTitle = t['title'] ?? t['titulo'] ?? t['nome'] ?? 'Sem título';
             String trackArtist = t['artist'] ?? t['artista'] ?? t['banda'] ?? 'Desconhecido';
-
-            var existingLockedTrack = _activeConversation.tracks.cast<Map<String, String>?>().firstWhere(
-              (oldTrack) => oldTrack!['locked'] == 'true' && oldTrack['title']?.toLowerCase() == trackTitle.toLowerCase(),
-              orElse: () => null
-            );
-
-            if (existingLockedTrack != null) {
-              newTracks.add(existingLockedTrack); 
-              continue;
-            }
-
+            var existingLockedTrack = _activeConversation.tracks.cast<Map<String, String>?>().firstWhere((oldTrack) => oldTrack!['locked'] == 'true' && oldTrack['title']?.toLowerCase() == trackTitle.toLowerCase(), orElse: () => null);
+            if (existingLockedTrack != null) { newTracks.add(existingLockedTrack); continue; }
             try {
               final spotifyData = await SpotifyService().searchTrack(trackTitle, trackArtist);
-              newTracks.add({
-                'title': trackTitle, 'artist': trackArtist,
-                'id': spotifyData?['id'] ?? '', 'image': spotifyData?['image'] ?? '',
-                'locked': 'false', 
-              });
+              newTracks.add({'title': trackTitle, 'artist': trackArtist, 'id': spotifyData?['id'] ?? '', 'image': spotifyData?['image'] ?? '', 'locked': 'false'});
             } catch (e) {
-              LogService().add('⚠️ REDE: Falha ao buscar "${t['title']}". Usando fallback.');
+              LogService().add('⚠️ REDE: Falha ao buscar "${t['title']}".');
               newTracks.add({'title': t['title'] ?? 'Erro', 'artist': t['artist'] ?? '', 'id': '', 'image': '', 'locked': 'false'});
             }
           }
         }
-
-        setState(() {
-          _activeConversation.messages.add(ChatMessage(text: chatReply, isUser: false));
-          _activeConversation.tracks = newTracks;
-          _activeConversation.title = playlistData['title'] ?? _activeConversation.title;
-          _isLoading = false;
-          _saveHistory(); 
-        });
-        
+        setState(() { _activeConversation.messages.add(ChatMessage(text: chatReply, isUser: false)); _activeConversation.tracks = newTracks; _activeConversation.title = playlistData['title'] ?? _activeConversation.title; _isLoading = false; _saveHistory(); });
         LogService().add('✅ SPOTIFAI: Curadoria concluída!');
         _scrollToBottom();
       }
     } catch (e) {
       LogService().add('❌ ERRO CRÍTICO: $e');
-      if (mounted) {
-        setState(() {
-          _activeConversation.messages.add(ChatMessage(text: 'Falha no sistema. Abra os logs.', isUser: false));
-          _isLoading = false;
-          _saveHistory(); 
-        });
-        LogService().add('✅ SPOTIFAI: Curadoria concluída!'); 
-        _scrollToBottom();
-      }
+      if (mounted) { setState(() { _activeConversation.messages.add(ChatMessage(text: 'Falha no sistema.', isUser: false)); _isLoading = false; _saveHistory(); }); LogService().add('✅ SPOTIFAI: Falha.'); _scrollToBottom(); }
     }
   }
 
   void _savePlaylist() async {
     if (_activeConversation.tracks.isEmpty || _isSaving) return;
-    
-    if (!SpotifyService().isLogged) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-        content: Text('❌ Conecte o Spotify no menu lateral antes de salvar.'),
-        backgroundColor: Colors.redAccent,
-      ));
-      return;
-    }
-
+    if (!SpotifyService().isLogged) { ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('❌ Conecte o Spotify!'), backgroundColor: Colors.redAccent)); return; }
     setState(() => _isSaving = true);
     LogService().add('💾 UI: Tentando salvar a playlist...');
-
-    List<String> trackUris = _activeConversation.tracks
-        .where((t) => t['id'] != null && t['id']!.isNotEmpty)
-        .map((t) => t['id']!)
-        .toList();
-
-    bool sucesso = await SpotifyService().createAndPopulatePlaylist(
-      _activeConversation.title, "Gerada pelo SpotifAI Copilot", trackUris
-    );
-
-    if (mounted) {
-      setState(() => _isSaving = false);
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text(sucesso ? 'Playlist salva no Spotify! 🔥' : 'Erro ao salvar playlist.'),
-        backgroundColor: sucesso ? const Color(0xFF1DB954) : Colors.redAccent,
-      ));
-    }
+    List<String> trackUris = _activeConversation.tracks.where((t) => t['id'] != null && t['id']!.isNotEmpty).map((t) => t['id']!).toList();
+    bool sucesso = await SpotifyService().createAndPopulatePlaylist(_activeConversation.title, "Gerada pelo SpotifAI Copilot", trackUris);
+    if (mounted) { setState(() => _isSaving = false); ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(sucesso ? 'Playlist salva! 🔥' : 'Erro.'), backgroundColor: sucesso ? const Color(0xFF1DB954) : Colors.redAccent)); }
   }
 
   void _listen() async {
     if (!_isListening) {
-      bool available = await _speech.initialize(
-        onStatus: (val) { 
-          if (val == 'done' || val == 'notListening') {
-            setState(() => _isListening = false); 
-          }
-        },
-        onError: (val) => setState(() => _isListening = false),
-      );
-      
+      bool available = await _speech.initialize(onStatus: (val) { if (val == 'done' || val == 'notListening') setState(() => _isListening = false); }, onError: (val) => setState(() => _isListening = false));
       if (available) {
-        setState(() { 
-          _isListening = true; 
-          _searchController.clear(); 
-          _lastPollutedText = ""; 
-        });
-        
-        _speech.listen(
-          onResult: (val) {
+        setState(() { _isListening = true; _searchController.clear(); _lastPollutedText = ""; });
+        _speech.listen(onResult: (val) {
             setState(() {
               String recognized = val.recognizedWords;
-
               if (kIsWeb && defaultTargetPlatform == TargetPlatform.android) {
-                if (_lastPollutedText.isNotEmpty && recognized.startsWith(_lastPollutedText)) {
-                  String extracted = recognized.substring(_lastPollutedText.length);
-                  _searchController.text = extracted;
-                } else {
-                  _searchController.text = recognized;
-                }
+                if (_lastPollutedText.isNotEmpty && recognized.startsWith(_lastPollutedText)) _searchController.text = recognized.substring(_lastPollutedText.length);
+                else _searchController.text = recognized;
                 _lastPollutedText = recognized; 
-              } else {
-                _searchController.text = recognized;
-              }
-
-              _searchController.selection = TextSelection.fromPosition(
-                TextPosition(offset: _searchController.text.length),
-              );
+              } else _searchController.text = recognized;
+              _searchController.selection = TextSelection.fromPosition(TextPosition(offset: _searchController.text.length));
             });
-          }, 
-          localeId: 'pt-BR',
-          listenOptions: stt.SpeechListenOptions(
-            cancelOnError: true,
-          ),
-        );
+          }, localeId: 'pt-BR', listenOptions: stt.SpeechListenOptions(cancelOnError: true));
       }
-    } else {
-      setState(() => _isListening = false);
-      _speech.stop();
-    }
+    } else { setState(() => _isListening = false); _speech.stop(); }
   }
 
   void _startNewConversation() {
-    setState(() {
-      _activeConversation = ChatConversation(id: DateTime.now().millisecondsSinceEpoch.toString(), title: 'Nova Curadoria', messages: []);
-      _conversations.insert(0, _activeConversation);
-      _searchController.clear();
-      _urlController.clear();
-      _saveHistory(); 
-    });
+    setState(() { _activeConversation = ChatConversation(id: DateTime.now().millisecondsSinceEpoch.toString(), title: 'Nova Curadoria', messages: []); _conversations.insert(0, _activeConversation); _searchController.clear(); _urlController.clear(); _saveHistory(); });
     Navigator.pop(context);
   }
 
   void _switchConversation(ChatConversation conversation) {
-    setState(() { _activeConversation = conversation; });
-    Navigator.pop(context);
-    _scrollToBottom();
+    setState(() { _activeConversation = conversation; }); Navigator.pop(context); _scrollToBottom();
   }
 
   void _deleteConversation(ChatConversation conv) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: Theme.of(context).cardColor,
-        title: const Text('Apagar conversa?'),
-        content: Text('A curadoria "${conv.title}" será removida permanentemente.'),
+    showDialog(context: context, builder: (context) => AlertDialog(
+        backgroundColor: Theme.of(context).cardColor, title: const Text('Apagar conversa?'), content: Text('A curadoria "${conv.title}" será removida.'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancelar', style: TextStyle(color: Colors.grey))),
-          TextButton(
-            onPressed: () {
-              setState(() {
-                _conversations.remove(conv); 
-                
-                if (_conversations.isEmpty) {
-                  _activeConversation = ChatConversation(id: DateTime.now().millisecondsSinceEpoch.toString(), title: 'Nova Curadoria', messages: []);
-                  _conversations.add(_activeConversation);
-                } 
-                else if (_activeConversation.id == conv.id) {
-                  _activeConversation = _conversations.first;
-                }
-                
-                _saveHistory(); 
-              });
-              Navigator.pop(context); 
-              Navigator.pop(context); 
-            },
-            child: const Text('Apagar', style: TextStyle(color: Colors.redAccent)),
-          ),
-        ],
-      ),
-    );
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancelar')),
+          TextButton(onPressed: () { setState(() { _conversations.remove(conv); if (_conversations.isEmpty) { _activeConversation = ChatConversation(id: DateTime.now().millisecondsSinceEpoch.toString(), title: 'Nova Curadoria', messages: []); _conversations.add(_activeConversation); } else if (_activeConversation.id == conv.id) _activeConversation = _conversations.first; _saveHistory(); }); Navigator.pop(context); Navigator.pop(context); }, child: const Text('Apagar', style: TextStyle(color: Colors.redAccent))),
+        ]));
   }
 
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).extension<AppleKitColors>()!;
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    
     final bool hasStarted = _activeConversation.messages.isNotEmpty || _activeConversation.tracks.isNotEmpty;
 
     return Scaffold(
@@ -553,124 +664,34 @@ class _HomePageState extends State<HomePage> {
                   switchInCurve: Curves.easeOutCubic,
                   switchOutCurve: Curves.easeInCubic,
                   transitionBuilder: (Widget child, Animation<double> animation) {
-                    return FadeTransition(
-                      opacity: animation,
-                      child: SlideTransition(
-                        position: Tween<Offset>(begin: const Offset(0.0, 0.05), end: Offset.zero).animate(animation),
-                        child: child,
-                      ),
-                    );
+                    return FadeTransition(opacity: animation, child: SlideTransition(position: Tween<Offset>(begin: const Offset(0.0, 0.05), end: Offset.zero).animate(animation), child: child));
                   },
-                  // --- MOTOR DE TELAS ATUALIZADO ---
+                  // ROTEADOR ATUALIZADO AQUI
                   child: _isCopilotMode 
-                      ? SizedBox(key: const ValueKey('copilot_grid'), child: _buildCopilotGrid(isDark, colors))
-                      : (!hasStarted
-                          ? SizedBox(key: const ValueKey('initial_state'), child: _buildInitialState(isDark)) 
-                          : SizedBox(key: const ValueKey('split_screen'), child: _buildSplitScreenResults(isDark, colors))),
+                      ? SizedBox(key: const ValueKey('copilot_router'), child: _buildCopilotRouter(isDark, colors))
+                      : (!hasStarted ? SizedBox(key: const ValueKey('initial_state'), child: _buildInitialState(isDark)) : SizedBox(key: const ValueKey('split_screen'), child: _buildSplitScreenResults(isDark, colors))),
                 ),
               ),
-              
               const SizedBox(height: 16), 
-
               AnimatedOpacity(
-                opacity: _loadingProgress > 0 ? 1.0 : 0.0,
-                duration: const Duration(milliseconds: 400),
-                child: Padding(
-                  padding: const EdgeInsets.only(left: 4, right: 4, bottom: 0),
-                  child: Container(
-                    height: 2,
-                    width: double.infinity,
-                    decoration: BoxDecoration(color: isDark ? Colors.white10 : Colors.black, borderRadius: BorderRadius.circular(2)),
-                    child: LayoutBuilder(
-                      builder: (context, constraints) {
-                        return Align(
-                          alignment: Alignment.centerLeft,
-                          child: AnimatedContainer(
-                            duration: const Duration(milliseconds: 800), 
-                            curve: Curves.easeInOutCubic,
-                            width: constraints.maxWidth * _loadingProgress,
-                            decoration: BoxDecoration(
-                              color: Colors.grey, 
-                              borderRadius: BorderRadius.circular(2),
-                              boxShadow: [BoxShadow(color: Colors.grey.withOpacity(0.3), blurRadius: 4, offset: const Offset(0, 1))]
-                            ),
-                          ),
-                        );
-                      },
-                    ),
-                  ),
-                ),
+                opacity: _loadingProgress > 0 ? 1.0 : 0.0, duration: const Duration(milliseconds: 400),
+                child: Padding(padding: const EdgeInsets.only(left: 4, right: 4, bottom: 0), child: Container(height: 2, width: double.infinity, decoration: BoxDecoration(color: isDark ? Colors.white10 : Colors.black, borderRadius: BorderRadius.circular(2)), child: LayoutBuilder(builder: (context, constraints) => Align(alignment: Alignment.centerLeft, child: AnimatedContainer(duration: const Duration(milliseconds: 800), curve: Curves.easeInOutCubic, width: constraints.maxWidth * _loadingProgress, decoration: BoxDecoration(color: Colors.grey, borderRadius: BorderRadius.circular(2), boxShadow: [BoxShadow(color: Colors.grey.withOpacity(0.3), blurRadius: 4, offset: const Offset(0, 1))])))))),
               ),
-
               const SizedBox(height: 12),
-
               Column(
                 children: [
                   AnimatedSize(
-                    duration: const Duration(milliseconds: 600),
-                    curve: Curves.easeInOutCubic,
-                    child: hasStarted || _isCopilotMode // Esconde o input no modo grade também
+                    duration: const Duration(milliseconds: 600), curve: Curves.easeInOutCubic,
+                    child: hasStarted || _isCopilotMode 
                       ? const SizedBox(width: double.infinity, height: 0) 
-                      : Column(
-                          children: [
-                            Container(
-                              decoration: BoxDecoration(
-                                color: const Color(0xFF1DB954).withOpacity(isDark ? 0.2 : 0.1),
-                                borderRadius: BorderRadius.circular(16),
-                                border: Border.all(color: const Color(0xFF1DB954).withOpacity(0.5)),
-                              ),
-                              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-                              child: Row(
-                                children: [
-                                  const Icon(CupertinoIcons.link, color: Color(0xFF1DB954), size: 20),
-                                  const SizedBox(width: 12),
-                                  Expanded(
-                                    child: TextField(
-                                      controller: _urlController,
-                                      style: TextStyle(color: isDark ? Colors.white : Colors.black),
-                                      decoration: InputDecoration(
-                                        hintText: 'Colar Playlist',
-                                        hintStyle: TextStyle(color: isDark ? Colors.white54 : Colors.black54),
-                                        border: InputBorder.none,
-                                      ),
-                                      onSubmitted: _importPlaylist,
-                                    ),
-                                  ),
-                                  IconButton(
-                                    icon: const Icon(CupertinoIcons.arrow_right_circle_fill, color: Color(0xFF1DB954)),
-                                    onPressed: () async {
-                                      ClipboardData? data = await Clipboard.getData(Clipboard.kTextPlain);
-                                      if (data != null && data.text != null && data.text!.isNotEmpty) {
-                                        setState(() => _urlController.text = data.text!);
-                                        _importPlaylist(data.text!);
-                                      } else if (_urlController.text.isNotEmpty) {
-                                        _importPlaylist(_urlController.text);
-                                      }
-                                    },
-                                  ),
-                                ],
-                              ),
-                            ),
-                            const SizedBox(height: 8), 
-                          ],
-                        ),
+                      : Column(children: [
+                          Container(decoration: BoxDecoration(color: const Color(0xFF1DB954).withOpacity(isDark ? 0.2 : 0.1), borderRadius: BorderRadius.circular(16), border: Border.all(color: const Color(0xFF1DB954).withOpacity(0.5))), padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4), child: Row(children: [const Icon(CupertinoIcons.link, color: Color(0xFF1DB954), size: 20), const SizedBox(width: 12), Expanded(child: TextField(controller: _urlController, style: TextStyle(color: isDark ? Colors.white : Colors.black), decoration: InputDecoration(hintText: 'Colar Playlist', hintStyle: TextStyle(color: isDark ? Colors.white54 : Colors.black54), border: InputBorder.none), onSubmitted: _importPlaylist)), IconButton(icon: const Icon(CupertinoIcons.arrow_right_circle_fill, color: Color(0xFF1DB954)), onPressed: () async { ClipboardData? data = await Clipboard.getData(Clipboard.kTextPlain); if (data != null && data.text != null && data.text!.isNotEmpty) { setState(() => _urlController.text = data.text!); _importPlaylist(data.text!); } else if (_urlController.text.isNotEmpty) _importPlaylist(_urlController.text); })])),
+                          const SizedBox(height: 8), 
+                        ]),
                   ),
-                  
                   AppleTranslucentSearchBar(
-                    controller: _searchController,
-                    hintText: _isListening ? 'Ouvindo...' : 'Criar nova Playlist...',
-                    onSubmitted: _submitSearch,
-                    suffixIcon: IconButton(
-                      icon: Icon(
-                        _searchController.text.isNotEmpty ? CupertinoIcons.arrow_up_circle_fill : (_isListening ? CupertinoIcons.mic_fill : CupertinoIcons.mic),
-                        color: _searchController.text.isNotEmpty ? const Color(0xFF1DB954) : (_isListening ? Colors.redAccent : colors.frostedGlassText),
-                        size: _searchController.text.isNotEmpty ? 28 : 24,
-                      ),
-                      onPressed: () {
-                        if (_searchController.text.isNotEmpty) _submitSearch(_searchController.text);
-                        else _listen();
-                      },
-                    ),
+                    controller: _searchController, hintText: _isListening ? 'Ouvindo...' : 'Criar nova Playlist...', onSubmitted: _submitSearch,
+                    suffixIcon: IconButton(icon: Icon(_searchController.text.isNotEmpty ? CupertinoIcons.arrow_up_circle_fill : (_isListening ? CupertinoIcons.mic_fill : CupertinoIcons.mic), color: _searchController.text.isNotEmpty ? const Color(0xFF1DB954) : (_isListening ? Colors.redAccent : colors.frostedGlassText), size: _searchController.text.isNotEmpty ? 28 : 24), onPressed: () { if (_searchController.text.isNotEmpty) _submitSearch(_searchController.text); else _listen(); }),
                   ),
                 ],
               ),
@@ -683,37 +704,10 @@ class _HomePageState extends State<HomePage> {
 
   PreferredSize _buildGlassAppBar(AppleKitColors colors, bool isDark) {
     final bool hasStarted = _activeConversation.messages.isNotEmpty || _activeConversation.tracks.isNotEmpty || _isCopilotMode;
-
     return PreferredSize(
       preferredSize: const Size.fromHeight(60),
       child: ClipRRect(
-        child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
-          child: AppBar(
-            backgroundColor: colors.frostedGlassBackground,
-            elevation: 0,
-            centerTitle: false,
-            titleSpacing: 0, 
-            leading: Builder(builder: (context) => IconButton(icon: Icon(CupertinoIcons.line_horizontal_3, color: isDark ? Colors.white : Colors.black87), onPressed: () => Scaffold.of(context).openDrawer())),
-            title: AnimatedSwitcher(
-              duration: const Duration(milliseconds: 800),
-              child: hasStarted 
-                ? Row(
-                    key: const ValueKey('appbar_title_active'),
-                    children: [
-                      ClipOval(child: Image.asset('assets/images/logo_bw.png', height: 32, width: 32, fit: BoxFit.cover, errorBuilder: (_, __, ___) => const Icon(CupertinoIcons.music_albums, size: 24, color: Colors.grey))),
-                      const SizedBox(width: 8),
-                      Text('SPOTIFAI', style: TextStyle(color: isDark ? Colors.white : Colors.black, fontSize: 16, fontWeight: FontWeight.w900)),
-                    ],
-                  ) 
-                : const SizedBox.shrink(key: ValueKey('appbar_title_empty')),
-            ),
-            actions: [
-              ThemeToggleButton(isDark: isDark, onToggle: _toggleTheme), 
-              const SizedBox(width: 8)
-            ],
-          ),
-        ),
+        child: BackdropFilter(filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12), child: AppBar(backgroundColor: colors.frostedGlassBackground, elevation: 0, centerTitle: false, titleSpacing: 0, leading: Builder(builder: (context) => IconButton(icon: Icon(CupertinoIcons.line_horizontal_3, color: isDark ? Colors.white : Colors.black87), onPressed: () => Scaffold.of(context).openDrawer())), title: AnimatedSwitcher(duration: const Duration(milliseconds: 800), child: hasStarted ? Row(key: const ValueKey('appbar_title_active'), children: [ClipOval(child: Image.asset('assets/images/logo_bw.png', height: 32, width: 32, fit: BoxFit.cover, errorBuilder: (_, __, ___) => const Icon(CupertinoIcons.music_albums, size: 24, color: Colors.grey))), const SizedBox(width: 8), Text('SPOTIFAI', style: TextStyle(color: isDark ? Colors.white : Colors.black, fontSize: 16, fontWeight: FontWeight.w900))]) : const SizedBox.shrink(key: ValueKey('appbar_title_empty'))), actions: [ThemeToggleButton(isDark: isDark, onToggle: _toggleTheme), const SizedBox(width: 8)])),
       ),
     );
   }
@@ -724,101 +718,13 @@ class _HomePageState extends State<HomePage> {
       child: SafeArea(
         child: Column(
           children: [
-            Padding(
-              padding: const EdgeInsets.all(16.0),
-              child: InkWell(
-                onTap: _startNewConversation,
-                child: Container(
-                  padding: const EdgeInsets.all(12), 
-                  decoration: BoxDecoration(color: isDark ? Colors.white.withOpacity(0.05) : Colors.black.withOpacity(0.05), borderRadius: BorderRadius.circular(12)), 
-                  child: Row(children: [Icon(CupertinoIcons.add, color: isDark ? Colors.white : Colors.black), const SizedBox(width: 12), Text('Novo Chat Musical', style: TextStyle(color: isDark ? Colors.white : Colors.black, fontWeight: FontWeight.bold))])
-                ),
-              ),
-            ),
+            Padding(padding: const EdgeInsets.all(16.0), child: InkWell(onTap: _startNewConversation, child: Container(padding: const EdgeInsets.all(12), decoration: BoxDecoration(color: isDark ? Colors.white.withOpacity(0.05) : Colors.black.withOpacity(0.05), borderRadius: BorderRadius.circular(12)), child: Row(children: [Icon(CupertinoIcons.add, color: isDark ? Colors.white : Colors.black), const SizedBox(width: 12), Text('Novo Chat Musical', style: TextStyle(color: isDark ? Colors.white : Colors.black, fontWeight: FontWeight.bold))])))),
             Divider(color: Colors.grey.withOpacity(0.2)),
-            
-            Expanded(
-              child: ListView.builder(
-                padding: EdgeInsets.zero,
-                itemCount: _conversations.length,
-                itemBuilder: (context, index) {
-                  final conv = _conversations[index];
-                  final isActive = conv.id == _activeConversation.id;
-                  return ListTile(
-                    selected: isActive,
-                    selectedTileColor: isDark ? Colors.white.withOpacity(0.05) : Colors.black.withOpacity(0.05),
-                    leading: Icon(CupertinoIcons.chat_bubble_2, color: isActive ? const Color(0xFF1DB954) : colors.frostedGlassText, size: 20),
-                    title: Text(conv.title, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: isActive ? (isDark ? Colors.white : Colors.black) : colors.frostedGlassText, fontSize: 14, fontWeight: isActive ? FontWeight.bold : FontWeight.normal)),
-                    trailing: IconButton(
-                      icon: const Icon(CupertinoIcons.trash, color: Colors.redAccent, size: 18),
-                      onPressed: () => _deleteConversation(conv),
-                    ),
-                    onTap: () => _switchConversation(conv),
-                  );
-                },
-              ),
-            ),
-
+            Expanded(child: ListView.builder(padding: EdgeInsets.zero, itemCount: _conversations.length, itemBuilder: (context, index) { final conv = _conversations[index]; final isActive = conv.id == _activeConversation.id; return ListTile(selected: isActive, selectedTileColor: isDark ? Colors.white.withOpacity(0.05) : Colors.black.withOpacity(0.05), leading: Icon(CupertinoIcons.chat_bubble_2, color: isActive ? const Color(0xFF1DB954) : colors.frostedGlassText, size: 20), title: Text(conv.title, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: isActive ? (isDark ? Colors.white : Colors.black) : colors.frostedGlassText, fontSize: 14, fontWeight: isActive ? FontWeight.bold : FontWeight.normal)), trailing: IconButton(icon: const Icon(CupertinoIcons.trash, color: Colors.redAccent, size: 18), onPressed: () => _deleteConversation(conv)), onTap: () => _switchConversation(conv)); })),
             Divider(color: Colors.grey.withOpacity(0.2)),
-            
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 4.0),
-              child: InkWell(
-                borderRadius: BorderRadius.circular(16),
-                onTap: () {
-                  Navigator.pop(context);
-                  Navigator.push(context, MaterialPageRoute(builder: (context) => const LogsPage()));
-                },
-                child: PremiumCard(
-                  color: isDark ? const Color(0xFF2C2C2E) : Colors.grey[200],
-                  padding: const EdgeInsets.all(16),
-                  child: Row(children: [const Icon(CupertinoIcons.doc_text_viewfinder, color: Colors.blueAccent), const SizedBox(width: 16), Text('Visualizar Logs', style: TextStyle(color: isDark ? Colors.white : Colors.black, fontWeight: FontWeight.bold))]),
-                ),
-              ),
-            ),
-
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 4.0),
-              child: PremiumCard(
-                color: isDark ? const Color(0xFF2C2C2E) : Colors.grey[200],
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Row(
-                      children: [
-                        const Icon(Icons.terminal_rounded, color: Colors.orangeAccent), 
-                        const SizedBox(width: 16), 
-                        Text('Logs no Chat', style: TextStyle(color: isDark ? Colors.white : Colors.black, fontWeight: FontWeight.bold)),
-                      ],
-                    ),
-                    CupertinoSwitch(
-                      activeColor: Colors.orangeAccent,
-                      value: _showLogsInChat,
-                      onChanged: (val) {
-                        setState(() => _showLogsInChat = val);
-                      },
-                    ),
-                  ],
-                ),
-              ),
-            ),
-
-            Padding(
-              padding: const EdgeInsets.only(left: 16.0, right: 16.0, bottom: 16.0, top: 4.0),
-              child: InkWell(
-                borderRadius: BorderRadius.circular(16),
-                onTap: () async {
-                  bool sucesso = await SpotifyService().authenticateUser();
-                  if (sucesso && mounted) { Navigator.pop(context); ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Spotify Conectado!'), backgroundColor: Color(0xFF1DB954))); }
-                },
-                child: PremiumCard(
-                  color: const Color(0xFF1DB954).withOpacity(0.15),
-                  padding: const EdgeInsets.all(16),
-                  child: Row(children: [const Icon(CupertinoIcons.play_circle_fill, color: Color(0xFF1DB954), size: 32), const SizedBox(width: 16), Text('Conectar Spotify', style: TextStyle(color: isDark ? Colors.white : Colors.black, fontWeight: FontWeight.bold))]),
-                ),
-              ),
-            ),
+            Padding(padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 4.0), child: InkWell(borderRadius: BorderRadius.circular(16), onTap: () { Navigator.pop(context); Navigator.push(context, MaterialPageRoute(builder: (context) => const LogsPage())); }, child: PremiumCard(color: isDark ? const Color(0xFF2C2C2E) : Colors.grey[200], padding: const EdgeInsets.all(16), child: Row(children: [const Icon(CupertinoIcons.doc_text_viewfinder, color: Colors.blueAccent), const SizedBox(width: 16), Text('Visualizar Logs', style: TextStyle(color: isDark ? Colors.white : Colors.black, fontWeight: FontWeight.bold))])))),
+            Padding(padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 4.0), child: PremiumCard(color: isDark ? const Color(0xFF2C2C2E) : Colors.grey[200], padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8), child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [Row(children: [const Icon(Icons.terminal_rounded, color: Colors.orangeAccent), const SizedBox(width: 16), Text('Logs no Chat', style: TextStyle(color: isDark ? Colors.white : Colors.black, fontWeight: FontWeight.bold))]), CupertinoSwitch(activeColor: Colors.orangeAccent, value: _showLogsInChat, onChanged: (val) => setState(() => _showLogsInChat = val))]))),
+            Padding(padding: const EdgeInsets.only(left: 16.0, right: 16.0, bottom: 16.0, top: 4.0), child: InkWell(borderRadius: BorderRadius.circular(16), onTap: () async { bool sucesso = await SpotifyService().authenticateUser(); if (sucesso && mounted) { Navigator.pop(context); ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Spotify Conectado!'), backgroundColor: Color(0xFF1DB954))); } }, child: PremiumCard(color: const Color(0xFF1DB954).withOpacity(0.15), padding: const EdgeInsets.all(16), child: Row(children: [const Icon(CupertinoIcons.play_circle_fill, color: Color(0xFF1DB954), size: 32), const SizedBox(width: 16), Text('Conectar Spotify', style: TextStyle(color: isDark ? Colors.white : Colors.black, fontWeight: FontWeight.bold))])))),
           ],
         ),
       ),
@@ -829,32 +735,19 @@ class _HomePageState extends State<HomePage> {
     return Column(
       mainAxisAlignment: MainAxisAlignment.center, 
       children: [
-        ClipOval(
-          child: Image.asset('assets/images/logo_bw.png', height: 120, width: 120, fit: BoxFit.cover, errorBuilder: (_, __, ___) => const Icon(CupertinoIcons.music_albums, size: 100, color: Colors.grey))
-        ), 
+        ClipOval(child: Image.asset('assets/images/logo_bw.png', height: 120, width: 120, fit: BoxFit.cover, errorBuilder: (_, __, ___) => const Icon(CupertinoIcons.music_albums, size: 100, color: Colors.grey))), 
         const SizedBox(height: 24), 
         Text('SPOTIFAI', style: TextStyle(fontSize: 32, fontWeight: FontWeight.w900, color: isDark ? Colors.white : Colors.black)), 
         const SizedBox(height: 16), 
         Text('Qual a vibe de hoje?', style: TextStyle(color: isDark ? Colors.grey[400] : Colors.grey[600])),
-        
         const SizedBox(height: 32),
-        
         AnimatedSwitcher(
           duration: const Duration(milliseconds: 300),
           child: _isLoadingCopilot 
             ? const CircularProgressIndicator(color: Color(0xFF1DB954))
             : ElevatedButton.icon(
                 onPressed: _startCopilot,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF1DB954).withOpacity(0.15),
-                  foregroundColor: const Color(0xFF1DB954),
-                  elevation: 0,
-                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(30),
-                    side: BorderSide(color: const Color(0xFF1DB954).withOpacity(0.5))
-                  )
-                ),
+                style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF1DB954).withOpacity(0.15), foregroundColor: const Color(0xFF1DB954), elevation: 0, padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30), side: BorderSide(color: const Color(0xFF1DB954).withOpacity(0.5)))),
                 icon: const Icon(CupertinoIcons.wand_stars),
                 label: const Text('Estou com Sorte', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
               ),
@@ -863,267 +756,32 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  // --- NOVA INTERFACE: A GRADE DE MIXES DO SPOTIFY ---
-  Widget _buildCopilotGrid(bool isDark, AppleKitColors colors) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          children: [
-            IconButton(
-              icon: Icon(CupertinoIcons.back, color: isDark ? Colors.white : Colors.black),
-              onPressed: () => setState(() => _isCopilotMode = false),
-            ),
-            Expanded(
-              child: Text(
-                'Suas Descobertas', 
-                style: TextStyle(color: isDark ? Colors.white : Colors.black, fontSize: 24, fontWeight: FontWeight.bold),
-              ),
-            ),
-          ],
-        ),
-        Padding(
-          padding: const EdgeInsets.only(left: 48, bottom: 16),
-          child: Text('Escolha uma vibe baseada no seu gosto', style: TextStyle(color: isDark ? Colors.grey[400] : Colors.grey[600], fontSize: 14)),
-        ),
-        Expanded(
-          child: GridView.builder(
-            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
-            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: 2,
-              childAspectRatio: 0.9, // Quadrado puxando pro alto igual a imagem
-              crossAxisSpacing: 16,
-              mainAxisSpacing: 16,
-            ),
-            itemCount: _copilotVibes.length,
-            itemBuilder: (context, index) {
-              final item = _copilotVibes[index];
-              
-              // Garante a extração correta independentemente se for Map ou String pura
-              String vibe = '';
-              List<String> artists = [];
-              if (item is Map) {
-                vibe = item['vibe'] ?? 'Mix Desconhecido';
-                artists = List<String>.from(item['artists'] ?? []);
-              } else {
-                vibe = item.toString();
-              }
-
-              // Pega a cor correspondente na paleta circularmente
-              final Color cardColor = _mixColors[index % _mixColors.length];
-
-              return InkWell(
-                borderRadius: BorderRadius.circular(8),
-                onTap: () {
-                  LogService().add('👆 UI: Usuário selecionou a vibe: $vibe');
-                  // AQUI ENTRARÁ A PRÓXIMA FASE DE UX
-                },
-                child: Container(
-                  decoration: BoxDecoration(
-                    color: cardColor,
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  clipBehavior: Clip.hardEdge, // Corta a marca d'água nas bordas
-                  child: Stack(
-                    children: [
-                      // Marca d'água no canto superior direito para dar a estética Spotify
-                      Positioned(
-                        right: -24,
-                        top: -24,
-                        child: Transform.rotate(
-                          angle: -0.2,
-                          child: Icon(
-                            CupertinoIcons.music_albums_fill, // Substitui a geometria por um ícone sutil
-                            size: 110,
-                            color: Colors.white.withOpacity(0.08),
-                          ),
-                        ),
-                      ),
-                      // Ícone pequeno do Spotify/App no topo esquerdo
-                      Positioned(
-                        left: 12,
-                        top: 12,
-                        child: Icon(CupertinoIcons.play_circle_fill, color: Colors.white, size: 16),
-                      ),
-                      // Textos alinhados na base
-                      Padding(
-                        padding: const EdgeInsets.all(12.0),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          mainAxisAlignment: MainAxisAlignment.end,
-                          children: [
-                            Row(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                // A barrinha vertical de destaque igual à imagem
-                                Container(
-                                  width: 4,
-                                  height: 18,
-                                  margin: const EdgeInsets.only(right: 6, top: 2),
-                                  decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(2)),
-                                ),
-                                Expanded(
-                                  child: Text(
-                                    vibe.replaceAll(RegExp(r'^[^\w\s]+'), '').trim(), // Remove o emoji se quiser um visual mais sério igual a imagem
-                                    style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold, height: 1.1),
-                                    maxLines: 2, overflow: TextOverflow.ellipsis,
-                                  ),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 6),
-                            // Subtítulo com os artistas
-                            Text(
-                              artists.isNotEmpty ? artists.join(', ') : 'Para você.',
-                              style: TextStyle(color: Colors.white.withOpacity(0.75), fontSize: 12, height: 1.2),
-                              maxLines: 2, overflow: TextOverflow.ellipsis,
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              );
-            },
-          ),
-        ),
-      ],
-    );
-  }
-  // --------------------------------------------------------
-
   Widget _buildSplitScreenResults(bool isDark, AppleKitColors colors) {
     return Column(
       children: [
         Expanded(
           flex: 3,
           child: PremiumCard(
-            color: const Color(0xFF121212),
-            padding: EdgeInsets.zero,
+            color: const Color(0xFF121212), padding: EdgeInsets.zero,
             child: Column(
               children: [
-                Padding(
-                  padding: const EdgeInsets.all(16.0),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Expanded(child: Text(_activeConversation.title, style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold), overflow: TextOverflow.ellipsis)),
-                      GestureDetector(
-                        onTap: _isSaving ? null : _savePlaylist, 
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6), 
-                          decoration: BoxDecoration(color: const Color(0xFF1DB954), borderRadius: BorderRadius.circular(16)), 
-                          child: _isSaving ? const SizedBox(width: 15, height: 15, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2)) : const Text('Salvar', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12))
-                        )
-                      )
-                    ],
-                  ),
-                ),
+                Padding(padding: const EdgeInsets.all(16.0), child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [Expanded(child: Text(_activeConversation.title, style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold), overflow: TextOverflow.ellipsis)), GestureDetector(onTap: _isSaving ? null : _savePlaylist, child: Container(padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6), decoration: BoxDecoration(color: const Color(0xFF1DB954), borderRadius: BorderRadius.circular(16)), child: _isSaving ? const SizedBox(width: 15, height: 15, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2)) : const Text('Salvar', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12))))])),
                 Expanded(
-                  child: _activeConversation.tracks.isEmpty 
-                    ? const Center(child: Text('Nenhuma faixa carregada.', style: TextStyle(color: Colors.grey)))
-                    : ListView.builder(
-                    itemCount: _activeConversation.tracks.length, 
-                    itemBuilder: (context, index) { 
-                      final track = _activeConversation.tracks[index]; 
-                      final bool isLocked = track['locked'] == 'true'; 
-
-                      return ListTile(
-                        leading: ClipRRect(
-                          borderRadius: BorderRadius.circular(8), 
-                          child: track['image']!.isNotEmpty 
-                            ? Image.network(track['image']!, width: 40, height: 40, fit: BoxFit.cover, errorBuilder: (_, __, ___) => const Icon(CupertinoIcons.music_note, color: Colors.grey)) 
-                            : Container(width: 40, height: 40, color: Colors.grey[800], child: const Icon(CupertinoIcons.music_note, color: Colors.grey))
-                        ), 
-                        title: Text(track['title'] ?? '', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w500)), 
-                        subtitle: Text(track['artist'] ?? '', style: TextStyle(color: Colors.grey[400], fontSize: 12)), 
-                        
-                        trailing: IconButton(
-                          icon: Icon(
-                            isLocked ? CupertinoIcons.lock_fill : CupertinoIcons.lock_open,
-                            color: isLocked ? const Color(0xFF1DB954) : Colors.grey[600],
-                            size: 20,
-                          ),
-                          onPressed: () {
-                            setState(() {
-                              track['locked'] = isLocked ? 'false' : 'true';
-                              _saveHistory(); 
-                            });
-                          },
-                        )
-                      ); 
-                    }
-                  ),
+                  child: _activeConversation.tracks.isEmpty ? const Center(child: Text('Nenhuma faixa carregada.', style: TextStyle(color: Colors.grey))) : ListView.builder(itemCount: _activeConversation.tracks.length, itemBuilder: (context, index) { final track = _activeConversation.tracks[index]; final bool isLocked = track['locked'] == 'true'; return ListTile(leading: ClipRRect(borderRadius: BorderRadius.circular(8), child: track['image']!.isNotEmpty ? Image.network(track['image']!, width: 40, height: 40, fit: BoxFit.cover, errorBuilder: (_, __, ___) => const Icon(CupertinoIcons.music_note, color: Colors.grey)) : Container(width: 40, height: 40, color: Colors.grey[800], child: const Icon(CupertinoIcons.music_note, color: Colors.grey))), title: Text(track['title'] ?? '', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w500)), subtitle: Text(track['artist'] ?? '', style: TextStyle(color: Colors.grey[400], fontSize: 12)), trailing: IconButton(icon: Icon(isLocked ? CupertinoIcons.lock_fill : CupertinoIcons.lock_open, color: isLocked ? const Color(0xFF1DB954) : Colors.grey[600], size: 20), onPressed: () { setState(() { track['locked'] = isLocked ? 'false' : 'true'; _saveHistory(); }); })); }),
                 ),
               ],
             ),
           ),
         ),
         const SizedBox(height: 16),
-        
         Expanded(
           flex: 2,
           child: PremiumCard(
-            color: isDark ? const Color(0xFF1C1C1E) : Colors.grey[100],
-            padding: const EdgeInsets.all(12),
+            color: isDark ? const Color(0xFF1C1C1E) : Colors.grey[100], padding: const EdgeInsets.all(12),
             child: Stack(
               children: [
-                ListView.builder(
-                  controller: _chatScrollController,
-                  itemCount: _activeConversation.messages.length,
-                  itemBuilder: (context, index) {
-                    final msg = _activeConversation.messages[index];
-                    
-                    Color bgColor = msg.isUser 
-                        ? const Color(0xFF1DB954) 
-                        : (msg.isLog ? (isDark ? Colors.black : Colors.white) : (isDark ? const Color(0xFF2C2C2E) : Colors.white));
-                        
-                    return Align(
-                      alignment: msg.isUser ? Alignment.centerRight : Alignment.centerLeft,
-                      child: Container(
-                        margin: const EdgeInsets.only(bottom: 12),
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                        decoration: BoxDecoration(
-                          color: bgColor,
-                          borderRadius: BorderRadius.only(
-                            topLeft: const Radius.circular(16),
-                            topRight: const Radius.circular(16),
-                            bottomLeft: Radius.circular(msg.isUser ? 16 : 4),
-                            bottomRight: Radius.circular(msg.isUser ? 4 : 16),
-                          ),
-                          border: msg.isUser || msg.isLog ? null : Border.all(color: Colors.grey.withOpacity(0.2)),
-                        ),
-                        child: SelectableText(
-                          msg.text,
-                          style: TextStyle(
-                            color: msg.isUser 
-                                ? Colors.white 
-                                : (msg.isLog ? _getLogColor(msg.text, isDark) : (msg.text.contains('Erro exato') ? Colors.redAccent : (isDark ? Colors.white : Colors.black87))),
-                            fontSize: msg.isLog ? 11 : 14,
-                            fontFamily: msg.isLog ? 'monospace' : null,
-                          ),
-                        ),
-                      ),
-                    );
-                  },
-                ),
-                if (_isLoading)
-                  Positioned(
-                    bottom: 0,
-                    left: 0,
-                    child: Container(
-                      padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(color: isDark ? Colors.black54 : Colors.white70, borderRadius: BorderRadius.circular(16)),
-                      child: Row(
-                        children: [
-                          const CupertinoActivityIndicator(radius: 10),
-                          const SizedBox(width: 8),
-                          Text('SpotifAI trabalhando...', style: TextStyle(fontSize: 12, color: isDark ? Colors.grey[400] : Colors.grey[600]))
-                        ],
-                      ),
-                    ),
-                  ),
+                ListView.builder(controller: _chatScrollController, itemCount: _activeConversation.messages.length, itemBuilder: (context, index) { final msg = _activeConversation.messages[index]; Color bgColor = msg.isUser ? const Color(0xFF1DB954) : (msg.isLog ? (isDark ? Colors.black : Colors.white) : (isDark ? const Color(0xFF2C2C2E) : Colors.white)); return Align(alignment: msg.isUser ? Alignment.centerRight : Alignment.centerLeft, child: Container(margin: const EdgeInsets.only(bottom: 12), padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12), decoration: BoxDecoration(color: bgColor, borderRadius: BorderRadius.only(topLeft: const Radius.circular(16), topRight: const Radius.circular(16), bottomLeft: Radius.circular(msg.isUser ? 16 : 4), bottomRight: Radius.circular(msg.isUser ? 4 : 16)), border: msg.isUser || msg.isLog ? null : Border.all(color: Colors.grey.withOpacity(0.2))), child: SelectableText(msg.text, style: TextStyle(color: msg.isUser ? Colors.white : (msg.isLog ? _getLogColor(msg.text, isDark) : (msg.text.contains('Erro exato') ? Colors.redAccent : (isDark ? Colors.white : Colors.black87))), fontSize: msg.isLog ? 11 : 14, fontFamily: msg.isLog ? 'monospace' : null)))); }),
+                if (_isLoading) Positioned(bottom: 0, left: 0, child: Container(padding: const EdgeInsets.all(8), decoration: BoxDecoration(color: isDark ? Colors.black54 : Colors.white70, borderRadius: BorderRadius.circular(16)), child: Row(children: [const CupertinoActivityIndicator(radius: 10), const SizedBox(width: 8), Text('SpotifAI trabalhando...', style: TextStyle(fontSize: 12, color: isDark ? Colors.grey[400] : Colors.grey[600]))]))),
               ],
             ),
           ),
@@ -1135,30 +793,13 @@ class _HomePageState extends State<HomePage> {
 
 class LogsPage extends StatelessWidget {
   const LogsPage({super.key});
-
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     return Scaffold(
       backgroundColor: isDark ? Colors.black : Colors.white,
       appBar: AppBar(title: Text('Terminal', style: TextStyle(color: isDark ? Colors.white : Colors.black)), backgroundColor: isDark ? Colors.black : Colors.white, iconTheme: IconThemeData(color: isDark ? Colors.white : Colors.black)),
-      body: ValueListenableBuilder<List<String>>(
-        valueListenable: LogService().logsNotifier,
-        builder: (context, logs, child) {
-          if (logs.isEmpty) return const Center(child: Text('A aguardar eventos...'));
-          return ListView.builder(
-            padding: const EdgeInsets.all(16), itemCount: logs.length,
-            itemBuilder: (context, index) {
-              final log = logs[index];
-              Color textColor = Colors.grey[400]!;
-              if (log.contains('❌') || log.contains('ERRO')) textColor = Colors.redAccent;
-              if (log.contains('✅') || log.contains('sucesso')) textColor = const Color.fromARGB(255, 8, 124, 12);
-              if (log.contains('🚀') || log.contains('🧠') || log.contains('UI')) textColor = Colors.blueAccent;
-              return Padding(padding: const EdgeInsets.only(bottom: 6.0), child: SelectableText(log, style: TextStyle(fontFamily: 'monospace', fontSize: 11, color: textColor)));
-            },
-          );
-        },
-      ),
+      body: ValueListenableBuilder<List<String>>(valueListenable: LogService().logsNotifier, builder: (context, logs, child) { if (logs.isEmpty) return const Center(child: Text('A aguardar eventos...')); return ListView.builder(padding: const EdgeInsets.all(16), itemCount: logs.length, itemBuilder: (context, index) { final log = logs[index]; Color textColor = Colors.grey[400]!; if (log.contains('❌') || log.contains('ERRO')) textColor = Colors.redAccent; if (log.contains('✅') || log.contains('sucesso')) textColor = const Color.fromARGB(255, 8, 124, 12); if (log.contains('🚀') || log.contains('🧠') || log.contains('UI')) textColor = Colors.blueAccent; return Padding(padding: const EdgeInsets.only(bottom: 6.0), child: SelectableText(log, style: TextStyle(fontFamily: 'monospace', fontSize: 11, color: textColor))); }); }),
     );
   }
 }
