@@ -90,6 +90,8 @@ class _HomePageState extends State<HomePage> {
 
   bool _isListening = false;
   bool _isLoadingCopilot = false;
+  double _energyLevel = 2.0; // Slider 3: Energia
+
   final List<Color> _mixColors = [
     const Color(0xFF985310),
     const Color(0xFF3A5A78),
