@@ -67,6 +67,8 @@ class _HomePageState extends State<HomePage> {
   final ScrollController _chatScrollController = ScrollController();
   
   bool _isListening = false;
+  bool _isLoadingCopilot = false;
+  List<String> _copilotVibes = []; // Vai guardar as 6 opções geradas pela IA
   bool _isLoading = false; 
   bool _isSaving = false;
   bool _showLogsInChat = false; 
@@ -130,6 +132,44 @@ class _HomePageState extends State<HomePage> {
     // Lê o brilho nativo do sistema e ajusta o pacote premium
     final brightness = PlatformDispatcher.instance.platformBrightness;
     themeNotifier.value = brightness == Brightness.dark ? ThemeMode.dark : ThemeMode.light;
+  }
+
+  void _startCopilot() async {
+    // 1. Trava de segurança: precisa estar logado para puxarmos o DNA musical
+    if (!SpotifyService().isLogged) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('❌ Conecte o Spotify no menu lateral primeiro!'),
+        backgroundColor: Colors.redAccent,
+      ));
+      return;
+    }
+
+    setState(() => _isLoadingCopilot = true);
+    LogService().add('👆 UI: Iniciando Modo Copiloto Guiado...');
+
+    // 2. Puxa os dados do Spotify (O Raio-X)
+    List<String> topArtists = await SpotifyService().getUserTopArtists();
+
+    // 3. O Gemini traduz os artistas em 6 botões (A Direção de Arte)
+    List<String> vibes = await AiService().generateDynamicVibes(topArtists);
+
+    if (mounted) {
+      setState(() {
+        _copilotVibes = vibes;
+        _isLoadingCopilot = false;
+        
+        // Se for uma conversa nova, o SpotifAI já manda a primeira mensagem
+        if (_activeConversation.messages.isEmpty) {
+          _activeConversation.messages.add(
+            ChatMessage(
+              text: "Li seu DNA musical! 🧬 Qual dessas vibes combina mais com o seu momento agora? (Você pode clicar em uma ou me pedir para gerar outras opções na barra de pesquisa).", 
+              isUser: false
+            )
+          );
+        }
+      });
+      _scrollToBottom();
+    }
   }
 
   @override
@@ -793,9 +833,44 @@ class _HomePageState extends State<HomePage> {
   }
 
   Widget _buildInitialState(bool isDark) {
-    return Column(mainAxisAlignment: MainAxisAlignment.center, children: [ClipOval(child: Image.asset('assets/images/logo_bw.png', height: 120, width: 120, fit: BoxFit.cover, errorBuilder: (_, __, ___) => const Icon(CupertinoIcons.music_albums, size: 100, color: Colors.grey))), const SizedBox(height: 24), Text('SPOTIFAI', style: TextStyle(fontSize: 32, fontWeight: FontWeight.w900, color: isDark ? Colors.white : Colors.black)), const SizedBox(height: 16), Text('Qual a vibe de hoje?', style: TextStyle(color: isDark ? Colors.grey[400] : Colors.grey[600]))]);
+    return Column(
+      mainAxisAlignment: MainAxisAlignment.center, 
+      children: [
+        ClipOval(
+          child: Image.asset('assets/images/logo_bw.png', height: 120, width: 120, fit: BoxFit.cover, errorBuilder: (_, __, ___) => const Icon(CupertinoIcons.music_albums, size: 100, color: Colors.grey))
+        ), 
+        const SizedBox(height: 24), 
+        Text('SPOTIFAI', style: TextStyle(fontSize: 32, fontWeight: FontWeight.w900, color: isDark ? Colors.white : Colors.black)), 
+        const SizedBox(height: 16), 
+        Text('Qual a vibe de hoje?', style: TextStyle(color: isDark ? Colors.grey[400] : Colors.grey[600])),
+        
+        const SizedBox(height: 32),
+        
+        // O NOSSO NOVO BOTÃO DE IGNIÇÃO
+        AnimatedSwitcher(
+          duration: const Duration(milliseconds: 300),
+          child: _isLoadingCopilot 
+            ? const CircularProgressIndicator(color: Color(0xFF1DB954))
+            : ElevatedButton.icon(
+                onPressed: _startCopilot,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF1DB954).withOpacity(0.15),
+                  foregroundColor: const Color(0xFF1DB954),
+                  elevation: 0,
+                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(30),
+                    side: BorderSide(color: const Color(0xFF1DB954).withOpacity(0.5))
+                  )
+                ),
+                icon: const Icon(CupertinoIcons.wand_stars),
+                label: const Text('Estou com Sorte', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+              ),
+        )
+      ]
+    );
   }
-
+  
   Widget _buildSplitScreenResults(bool isDark, AppleKitColors colors) {
     return Column(
       children: [

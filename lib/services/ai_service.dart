@@ -40,6 +40,7 @@ class AiService {
   O título deve ter até 17 dígitos + " SpotifAI"
   ''';
 
+  /// Geração da Playlist Completa (O Motor Principal)
   Future<Map<String, dynamic>?> generatePlaylist(String prompt) async {
     LogService().add('🚀 AI: Disparando prompt para a nuvem da Cloudflare...');
 
@@ -72,6 +73,94 @@ class AiService {
     } catch (e) {
       LogService().add('❌ AI EXCEÇÃO: $e');
       return null;
+    }
+  }
+
+  /// -------------------------------------------------------------------------
+  /// NOVAS FUNÇÕES: MODO "ESTOU COM SORTE" (COPILOTO GUIADO)
+  /// -------------------------------------------------------------------------
+
+  /// Transforma a lista de artistas favoritos do usuário em 6 botões de "Vibes"
+  Future<List<String>> generateDynamicVibes(List<String> topArtists) async {
+    // 1. O Plano B: Se tudo der errado, o usuário não percebe e vê botões genéricos
+    final List<String> fallbackVibes = [
+      "🔥 Pop Hits", 
+      "🎸 Rock & Energia", 
+      "🛋️ Lo-Fi Relax", 
+      "🎤 Rap & Hip-Hop", 
+      "💃 Batida Eletrônica", 
+      "🎲 Surpreenda-me"
+    ];
+
+    // Se o Spotify não devolveu artistas (ex: conta nova sem histórico), usa o Plano B
+    if (topArtists.isEmpty) {
+      LogService().add('⚠️ AI: Sem artistas base. Usando vibes padrão.');
+      return fallbackVibes;
+    }
+
+    // 2. O Prompt Cirúrgico
+    String prompt = """
+    Você é um curador musical especialista em UX. O usuário costuma ouvir estes artistas: ${topArtists.join(', ')}.
+    Crie 5 categorias (vibes musicais) curtas, criativas e altamente atraentes baseadas NESSE gosto específico.
+    Regras estritas:
+    - Máximo de 3 palavras por categoria.
+    - Pode (e deve) usar 1 emoji no início de cada uma.
+    - A 6ª categoria DEVE ser obrigatoriamente a string exata: "🎲 Surpreenda-me".
+    
+    IMPORTANTE: Responda APENAS com um array JSON válido contendo as 6 strings. Zero explicações.
+    Exemplo do formato exigido:
+    ["🎸 Rock Clássico", "🌧️ Sad R&B", "🕺 Swing Pop", "🤠 Modão Raiz", "🎧 Foco Total", "🎲 Surpreenda-me"]
+    """;
+
+    try {
+      LogService().add('🧠 AI: Analisando artistas para gerar botões dinâmicos...');
+      
+      // Chama a nossa nova função de apoio interna
+      String responseText = await _generateTextFromGemini(prompt); 
+      
+      // 3. Sanitização Bruta
+      responseText = responseText.replaceAll('```json', '').replaceAll('```', '').trim();
+      
+      // 4. Transformação
+      List<dynamic> decodedArray = jsonDecode(responseText);
+      List<String> vibes = decodedArray.map((e) => e.toString()).toList();
+      
+      if (vibes.length >= 6) {
+        LogService().add('✅ AI: Botões dinâmicos gerados com sucesso!');
+        return vibes.take(6).toList(); 
+      }
+      
+      return fallbackVibes;
+    } catch (e) {
+      LogService().add('❌ ERRO AI: Falha ao gerar botões (usando fallback): $e');
+      return fallbackVibes;
+    }
+  }
+
+  /// Função interna de apoio para chamadas rápidas e diretas ao Gemini (Sem instruções do modo Playlist)
+  Future<String> _generateTextFromGemini(String prompt) async {
+    try {
+      final response = await http.post(
+        Uri.parse('$_workerUrl/v1beta/models/gemini-2.5-flash:generateContent'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          "contents": [{
+            "parts": [{"text": prompt}]
+          }],
+          "generationConfig": {
+            "response_mime_type": "application/json" // Força o JSON para garantir o array de strings
+          }
+        }),
+      );
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        return data['candidates'][0]['content']['parts'][0]['text'];
+      } else {
+        throw Exception('HTTP ${response.statusCode} - ${response.body}');
+      }
+    } catch (e) {
+      rethrow;
     }
   }
 }
