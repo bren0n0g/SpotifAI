@@ -85,6 +85,7 @@ class _HomePageState extends State<HomePage> {
   List<String> _selectedArtists = [];
   double _artistExploration = 2.0;
   double _trackExploration = 2.0;
+  String _selectedEnergy = ''; // Nova variável do Passo 5
 
   final List<Color> _mixColors = [
     const Color(0xFF985310),
@@ -176,6 +177,7 @@ class _HomePageState extends State<HomePage> {
       _selectedArtists.clear();
       _artistExploration = 2.0;
       _trackExploration = 2.0;
+      _selectedEnergy = '';
       _manualGenreController.clear();
     });
     LogService().add('👆 UI: Iniciando Modo Copiloto Guiado...');
@@ -184,7 +186,6 @@ class _HomePageState extends State<HomePage> {
       limit: 15,
     );
     _topArtistsCache = topArtists;
-
     List<dynamic> vibes = await AiService().generateDynamicVibes(topArtists);
 
     if (mounted) {
@@ -286,6 +287,11 @@ class _HomePageState extends State<HomePage> {
         return SizedBox(
           key: const ValueKey('step4'),
           child: _buildStep4Exploration(isDark, colors),
+        );
+      case 5:
+        return SizedBox(
+          key: const ValueKey('step5'),
+          child: _buildStep5Energy(isDark, colors),
         );
       default:
         return SizedBox(
@@ -496,7 +502,12 @@ class _HomePageState extends State<HomePage> {
         ),
         Expanded(
           child: GridView.builder(
-            padding: const EdgeInsets.fromLTRB(16, 8, 16, 80),
+            padding: const EdgeInsets.fromLTRB(
+              16,
+              8,
+              16,
+              16,
+            ), // Padding bottom menor para não empurrar muito
             gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
               crossAxisCount: 2,
               childAspectRatio: 3.5,
@@ -559,26 +570,34 @@ class _HomePageState extends State<HomePage> {
             },
           ),
         ),
-        Container(
-          width: double.infinity,
-          padding: const EdgeInsets.all(16),
-          child: ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF1DB954),
-              padding: const EdgeInsets.symmetric(vertical: 16),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(30),
+        // BOTÃO CONTINUAR CORRIGIDO (Transparente e colado em baixo)
+        Padding(
+          padding: const EdgeInsets.only(
+            left: 16,
+            right: 16,
+            top: 8,
+            bottom: 8,
+          ),
+          child: SizedBox(
+            width: double.infinity,
+            child: ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF1DB954),
+                padding: const EdgeInsets.symmetric(vertical: 16),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(30),
+                ),
               ),
-            ),
-            onPressed: _selectedArtists.isNotEmpty
-                ? () => setState(() => _copilotStep = 4)
-                : null,
-            child: const Text(
-              'Continuar',
-              style: TextStyle(
-                color: Colors.white,
-                fontSize: 16,
-                fontWeight: FontWeight.bold,
+              onPressed: _selectedArtists.isNotEmpty
+                  ? () => setState(() => _copilotStep = 4)
+                  : null,
+              child: const Text(
+                'Continuar',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                ),
               ),
             ),
           ),
@@ -651,30 +670,37 @@ class _HomePageState extends State<HomePage> {
             ),
           ),
         ),
-        Container(
-          width: double.infinity,
-          padding: const EdgeInsets.all(16),
-          child: ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF1DB954),
-              padding: const EdgeInsets.symmetric(vertical: 16),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(30),
+        Padding(
+          padding: const EdgeInsets.only(
+            left: 16,
+            right: 16,
+            top: 8,
+            bottom: 8,
+          ),
+          child: SizedBox(
+            width: double.infinity,
+            child: ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF1DB954),
+                padding: const EdgeInsets.symmetric(vertical: 16),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(30),
+                ),
               ),
-            ),
-            onPressed: () {
-              if (_manualGenreController.text.isNotEmpty)
-                setState(() {
-                  _selectedVibe = _manualGenreController.text;
-                  _copilotStep = 4;
-                });
-            },
-            child: const Text(
-              'Continuar',
-              style: TextStyle(
-                color: Colors.white,
-                fontSize: 16,
-                fontWeight: FontWeight.bold,
+              onPressed: () {
+                if (_manualGenreController.text.isNotEmpty)
+                  setState(() {
+                    _selectedVibe = _manualGenreController.text;
+                    _copilotStep = 4;
+                  });
+              },
+              child: const Text(
+                'Continuar',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                ),
               ),
             ),
           ),
@@ -752,28 +778,31 @@ class _HomePageState extends State<HomePage> {
             ),
           ),
         ),
-        Container(
-          width: double.infinity,
-          padding: const EdgeInsets.all(16),
-          child: ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF1DB954),
-              padding: const EdgeInsets.symmetric(vertical: 16),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(30),
+        Padding(
+          padding: const EdgeInsets.only(
+            left: 16,
+            right: 16,
+            top: 8,
+            bottom: 8,
+          ),
+          child: SizedBox(
+            width: double.infinity,
+            child: ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF1DB954),
+                padding: const EdgeInsets.symmetric(vertical: 16),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(30),
+                ),
               ),
-            ),
-            onPressed: () {
-              LogService().add(
-                '👆 UI: Finalizou Exploração. Artistas: $_artistExploration, Músicas: $_trackExploration',
-              );
-            },
-            child: const Text(
-              'Continuar',
-              style: TextStyle(
-                color: Colors.white,
-                fontSize: 16,
-                fontWeight: FontWeight.bold,
+              onPressed: () => setState(() => _copilotStep = 5),
+              child: const Text(
+                'Continuar',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                ),
               ),
             ),
           ),
@@ -844,10 +873,253 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
+  // --- NOVA TELA (PASSO 5): ENERGIA ---
+  Widget _buildStep5Energy(bool isDark, AppleKitColors colors) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            IconButton(
+              icon: Icon(
+                CupertinoIcons.back,
+                color: isDark ? Colors.white : Colors.black,
+              ),
+              onPressed: () => setState(() => _copilotStep = 4),
+            ),
+            Expanded(
+              child: Text(
+                'Sintonia Fina',
+                style: TextStyle(
+                  color: isDark ? Colors.white : Colors.black,
+                  fontSize: 24,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+          ],
+        ),
+        Padding(
+          padding: const EdgeInsets.only(left: 48, bottom: 24),
+          child: Text(
+            'Qual a energia ideal para essas músicas?',
+            style: TextStyle(
+              color: isDark ? Colors.grey[400] : Colors.grey[600],
+              fontSize: 14,
+            ),
+          ),
+        ),
+        Expanded(
+          child: ListView(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            children: [
+              _buildEnergyCard(
+                '⚡ Fritar',
+                'Batidas rápidas, volume alto e intensidade.',
+                'Alta Energia',
+                isDark,
+              ),
+              const SizedBox(height: 12),
+              _buildEnergyCard(
+                '🛋️ Relax',
+                'Acústico, calmo, voz e violão.',
+                'Baixa Energia (Relax)',
+                isDark,
+              ),
+              const SizedBox(height: 12),
+              _buildEnergyCard(
+                '🧠 Foco',
+                'Foco nos estudos ou trabalho, andamento linear.',
+                'Instrumental / Foco',
+                isDark,
+              ),
+              const SizedBox(height: 12),
+              _buildEnergyCard(
+                '💃 Dançante',
+                'Focado em ritmo marcado e groove.',
+                'Alta Danceability',
+                isDark,
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildEnergyCard(
+    String title,
+    String desc,
+    String value,
+    bool isDark,
+  ) {
+    return InkWell(
+      borderRadius: BorderRadius.circular(16),
+      onTap: () {
+        _selectedEnergy = value;
+        _finishCopilotAndGenerate(); // GATILHO FINAL!
+      },
+      child: Container(
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          color: isDark ? const Color(0xFF2C2C2E) : Colors.grey[200],
+          borderRadius: BorderRadius.circular(16),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              title,
+              style: TextStyle(
+                color: isDark ? Colors.white : Colors.black,
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              desc,
+              style: TextStyle(
+                color: isDark ? Colors.grey[400] : Colors.grey[600],
+                fontSize: 14,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // --- MOTOR DE GERAÇÃO FINAL DO COPILOTO ---
+  void _finishCopilotAndGenerate() async {
+    setState(() {
+      _isCopilotMode = false;
+      _isLoading = true;
+      _searchController.clear();
+
+      // Monta uma mensagem bonita como se o usuário tivesse digitado o prompt
+      String summary = "🎵 Curadoria Automática Solicitada:\n\n";
+      if (_selectedVibe.isNotEmpty) summary += "• Vibe: $_selectedVibe\n";
+      if (_selectedArtists.isNotEmpty)
+        summary += "• Artistas: ${_selectedArtists.join(', ')}\n";
+      summary += "• Exploração Artistas: Nível ${_artistExploration.toInt()}\n";
+      summary += "• Exploração Músicas: Nível ${_trackExploration.toInt()}\n";
+      summary += "• Energia: $_selectedEnergy";
+
+      _activeConversation.messages.add(
+        ChatMessage(text: summary, isUser: true),
+      );
+      _saveHistory();
+    });
+
+    _scrollToBottom();
+    LogService().add(
+      '👆 UI: Finalizando Copiloto e chamando o motor principal da IA...',
+    );
+
+    try {
+      String base = _selectedVibe.isNotEmpty
+          ? _selectedVibe
+          : "Baseado nos artistas escolhidos.";
+      String artistas = _selectedArtists.isNotEmpty
+          ? _selectedArtists.join(', ')
+          : "Artistas relacionados à vibe.";
+
+      // O SUPER PROMPT MATEMÁTICO INVISÍVEL
+      String promptComContexto =
+          """
+      [COMANDO RESTRITO DO SISTEMA COPILOTO]
+      O usuário configurou uma curadoria guiada com as seguintes regras matemáticas e rígidas:
+      - Vibe / Gênero Principal: $base
+      - Artistas Âncora: $artistas
+      - Nível de Descoberta de Artistas (0=Apenas famosos, 4=Artistas muito desconhecidos): $_artistExploration
+      - Nível de Descoberta de Músicas (0=Apenas Hits #1, 4=Músicas obscuras/Lado B): $_trackExploration
+      - Energia Acústica: $_selectedEnergy
+      
+      Você DEVE atuar como um curador mestre e criar uma playlist de exatamente 15 músicas reais do Spotify que se encaixem perfeitamente nesta equação de gostos. 
+      Retorne o formato JSON duplo padrão com 'chat_reply' e 'playlist_update'.
+      """;
+
+      final aiResult = await AiService().generatePlaylist(promptComContexto);
+
+      if (aiResult != null && mounted) {
+        final chatReply =
+            aiResult['chat_reply'] ??
+            'A mágica está feita! Aqui está sua nova curadoria.';
+        final playlistData = aiResult['playlist_update'] ?? aiResult;
+        List<Map<String, String>> newTracks = [];
+
+        if (playlistData['tracks'] != null) {
+          final rawTracks = playlistData['tracks'] as List;
+          LogService().add(
+            '🔍 SPOTIFY: Buscando metadados para ${rawTracks.length} músicas geradas pelo Copiloto...',
+          );
+          for (var t in rawTracks) {
+            String trackTitle =
+                t['title'] ?? t['titulo'] ?? t['nome'] ?? 'Sem título';
+            String trackArtist =
+                t['artist'] ?? t['artista'] ?? t['banda'] ?? 'Desconhecido';
+
+            try {
+              final spotifyData = await SpotifyService().searchTrack(
+                trackTitle,
+                trackArtist,
+              );
+              newTracks.add({
+                'title': trackTitle,
+                'artist': trackArtist,
+                'id': spotifyData?['id'] ?? '',
+                'image': spotifyData?['image'] ?? '',
+                'locked': 'false',
+              });
+            } catch (e) {
+              newTracks.add({
+                'title': trackTitle,
+                'artist': trackArtist,
+                'id': '',
+                'image': '',
+                'locked': 'false',
+              });
+            }
+          }
+        }
+        setState(() {
+          _activeConversation.messages.add(
+            ChatMessage(text: chatReply, isUser: false),
+          );
+          _activeConversation.tracks = newTracks;
+          _activeConversation.title =
+              playlistData['title'] ?? "Playlist Copiloto";
+          _isLoading = false;
+          _saveHistory();
+        });
+        LogService().add('✅ SPOTIFAI: Curadoria concluída com sucesso!');
+        _scrollToBottom();
+      }
+    } catch (e) {
+      LogService().add('❌ ERRO CRÍTICO NO COPILOTO: $e');
+      if (mounted) {
+        setState(() {
+          _activeConversation.messages.add(
+            ChatMessage(
+              text: 'A IA teve um contratempo processando essas métricas.',
+              isUser: false,
+            ),
+          );
+          _isLoading = false;
+          _saveHistory();
+        });
+        _scrollToBottom();
+      }
+    }
+  }
+
+  // --- O CHAT DE TEXTO NORMAL (AGORA INTERCEPTA PITACOS) ---
   void _submitSearch(String value) async {
     if (value.isEmpty || _isLoading) return;
     FocusScope.of(context).unfocus();
 
+    // INTERCEPTADOR: Se estivermos no Passo 1, o texto digitado ajusta a IA ao invés de buscar música
     if (_isCopilotMode && _copilotStep == 1) {
       setState(() => _isLoadingCopilot = true);
       LogService().add('👆 UI: Usuário pediu ajuste nos gêneros: "$value"');
