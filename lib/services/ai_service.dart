@@ -137,30 +137,51 @@ class AiService {
     }
   }
 
-  /// Função interna de apoio para chamadas rápidas e diretas ao Gemini (Sem instruções do modo Playlist)
-  Future<String> _generateTextFromGemini(String prompt) async {
-    try {
-      final response = await http.post(
-        Uri.parse('$_workerUrl/v1beta/models/gemini-2.5-flash:generateContent'),
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({
-          "contents": [{
-            "parts": [{"text": prompt}]
-          }],
-          "generationConfig": {
-            "response_mime_type": "application/json" // Força o JSON para garantir o array de strings
-          }
-        }),
-      );
+  /// Transforma a lista de artistas favoritos do usuário em 6 botões detalhados
+  Future<List<Map<String, dynamic>>> generateDynamicVibes(List<String> topArtists) async {
+    // 1. O Plano B: Estrutura atualizada para o formato de Mapa (Nome + Artistas)
+    final List<Map<String, dynamic>> fallbackVibes = List.generate(6, (index) => {
+      "vibe": "🎧 Vibe Padrão ${index + 1}",
+      "artists": ["Artista 1", "Artista 2", "Artista 3"]
+    });
 
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        return data['candidates'][0]['content']['parts'][0]['text'];
-      } else {
-        throw Exception('HTTP ${response.statusCode} - ${response.body}');
+    if (topArtists.isEmpty) return fallbackVibes;
+
+    // 2. O Prompt Cirúrgico Modificado
+    String prompt = """
+    Você é um curador musical. O usuário ouve: ${topArtists.join(', ')}.
+    Crie 5 categorias (vibes musicais) curtas com base nisso. A 6ª categoria DEVE ser "🎲 Surpreenda-me".
+    Para CADA categoria, escolha exatamente 3 artistas (que o usuário ouve ou recomendações parecidas) que representem essa vibe.
+    
+    IMPORTANTE: Responda APENAS com um array JSON. Sem formatação markdown.
+    Exemplo exato:
+    [
+      {"vibe": "🎸 Rock Clássico", "artists": ["AC/DC", "Queen", "Led Zeppelin"]},
+      {"vibe": "🌧️ Sad R&B", "artists": ["The Weeknd", "Joji", "Chase Atlantic"]}
+    ]
+    """;
+
+    try {
+      LogService().add('🧠 AI: Gerando grade de vibes e artistas base...');
+      String responseText = await _generateTextFromGemini(prompt); 
+      responseText = responseText.replaceAll('```json', '').replaceAll('```', '').trim();
+      
+      List<dynamic> decodedArray = jsonDecode(responseText);
+      
+      // Converte o JSON dinâmico para a nossa lista estrita
+      List<Map<String, dynamic>> vibes = decodedArray.map((e) => {
+        "vibe": e["vibe"].toString(),
+        "artists": (e["artists"] as List).map((a) => a.toString()).toList()
+      }).toList();
+      
+      if (vibes.length >= 6) {
+        LogService().add('✅ AI: Grade de botões gerada com sucesso!');
+        return vibes.take(6).toList(); 
       }
+      return fallbackVibes;
     } catch (e) {
-      rethrow;
+      LogService().add('❌ ERRO AI: Falha ao gerar grade detalhada: $e');
+      return fallbackVibes;
     }
   }
 }

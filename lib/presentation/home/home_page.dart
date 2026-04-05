@@ -9,7 +9,7 @@ import 'package:speech_to_text/speech_to_text.dart' as stt;
 import '../../services/spotify_service.dart';
 import '../../services/ai_service.dart';
 import '../../services/log_service.dart';
-import 'package:flutter/foundation.dart'; // <-- Adicione lá no topo
+import 'package:flutter/foundation.dart'; 
 
 class ChatMessage {
   final String text;
@@ -17,10 +17,8 @@ class ChatMessage {
   final bool isLog; 
   ChatMessage({required this.text, required this.isUser, this.isLog = false});
 
-  // --- ADICIONADO: Transformar para JSON ---
   Map<String, dynamic> toJson() => {'text': text, 'isUser': isUser, 'isLog': isLog};
   
-  // --- ADICIONADO: Ler de JSON ---
   factory ChatMessage.fromJson(Map<String, dynamic> json) => ChatMessage(
     text: json['text'], isUser: json['isUser'], isLog: json['isLog'] ?? false
   );
@@ -39,14 +37,12 @@ class ChatConversation {
     this.tracks = const [],
   });
 
-  // --- ADICIONADO: Transformar para JSON ---
   Map<String, dynamic> toJson() => {
     'id': id, 'title': title, 
     'messages': messages.map((m) => m.toJson()).toList(),
     'tracks': tracks
   };
 
-  // --- ADICIONADO: Ler de JSON ---
   factory ChatConversation.fromJson(Map<String, dynamic> json) => ChatConversation(
     id: json['id'], title: json['title'],
     messages: (json['messages'] as List).map((m) => ChatMessage.fromJson(m)).toList(),
@@ -68,12 +64,27 @@ class _HomePageState extends State<HomePage> {
   
   bool _isListening = false;
   bool _isLoadingCopilot = false;
-  List<String> _copilotVibes = []; // Vai guardar as 6 opções geradas pela IA
+  
+  // --- VARIÁVEIS DA NOVA INTERFACE ---
+  bool _isCopilotMode = false; 
+  List<dynamic> _copilotVibes = []; // Aceita a lista de mapas do AiService
+  
+  // Paleta inspirada na imagem do Spotify
+  final List<Color> _mixColors = [
+    const Color(0xFF985310), // Laranja/Marrom
+    const Color(0xFF3A5A78), // Azul Ardósia
+    const Color(0xFF32148B), // Roxo Profundo
+    const Color(0xFF46532B), // Verde Musgo
+    const Color(0xFFA01929), // Vermelho Escuro
+    const Color(0xFF91145C), // Magenta
+  ];
+  // -----------------------------------
+
   bool _isLoading = false; 
   bool _isSaving = false;
   bool _showLogsInChat = false; 
   double _loadingProgress = 0.0;
-  String _lastPollutedText = ""; // O nosso lixeiro de memória
+  String _lastPollutedText = ""; 
 
   late stt.SpeechToText _speech;
 
@@ -93,9 +104,8 @@ class _HomePageState extends State<HomePage> {
     );
     _conversations.insert(0, _activeConversation);
 
-    // --- ADICIONADO: Tenta puxar a memória salva ao abrir o app ---
     _loadHistory();
-    SpotifyService().loadSavedToken(); // <-- ADICIONE ESTA LINHA
+    SpotifyService().loadSavedToken();
 
     LogService().onNewLog = (String log) {
       if (mounted) {
@@ -129,13 +139,11 @@ class _HomePageState extends State<HomePage> {
         }
       }
     };
-    // Lê o brilho nativo do sistema e ajusta o pacote premium
     final brightness = PlatformDispatcher.instance.platformBrightness;
     themeNotifier.value = brightness == Brightness.dark ? ThemeMode.dark : ThemeMode.light;
   }
 
   void _startCopilot() async {
-    // 1. Trava de segurança: precisa estar logado para puxarmos o DNA musical
     if (!SpotifyService().isLogged) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
         content: Text('❌ Conecte o Spotify no menu lateral primeiro!'),
@@ -147,28 +155,16 @@ class _HomePageState extends State<HomePage> {
     setState(() => _isLoadingCopilot = true);
     LogService().add('👆 UI: Iniciando Modo Copiloto Guiado...');
 
-    // 2. Puxa os dados do Spotify (O Raio-X)
     List<String> topArtists = await SpotifyService().getUserTopArtists();
-
-    // 3. O Gemini traduz os artistas em 6 botões (A Direção de Arte)
-    List<String> vibes = await AiService().generateDynamicVibes(topArtists);
+    // Atenção: O AiService precisa estar atualizado para retornar List<Map<String, dynamic>>
+    List<dynamic> vibes = await AiService().generateDynamicVibes(topArtists);
 
     if (mounted) {
       setState(() {
         _copilotVibes = vibes;
         _isLoadingCopilot = false;
-        
-        // Se for uma conversa nova, o SpotifAI já manda a primeira mensagem
-        if (_activeConversation.messages.isEmpty) {
-          _activeConversation.messages.add(
-            ChatMessage(
-              text: "Li seu DNA musical! 🧬 Qual dessas vibes combina mais com o seu momento agora? (Você pode clicar em uma ou me pedir para gerar outras opções na barra de pesquisa).", 
-              isUser: false
-            )
-          );
-        }
+        _isCopilotMode = true; // Abre a grade personalizada
       });
-      _scrollToBottom();
     }
   }
 
@@ -180,7 +176,6 @@ class _HomePageState extends State<HomePage> {
     super.dispose();
   }
 
-  // --- ADICIONADO: FUNÇÕES DE MEMÓRIA (SHARED PREFERENCES) ---
   Future<void> _saveHistory() async {
     final prefs = await SharedPreferences.getInstance();
     final String encodedData = jsonEncode(_conversations.map((c) => c.toJson()).toList());
@@ -222,7 +217,7 @@ class _HomePageState extends State<HomePage> {
               setState(() {
                 _activeConversation.messages.clear();
                 _activeConversation.tracks.clear();
-                _saveHistory(); // Salva a limpeza
+                _saveHistory(); 
               });
               Navigator.pop(context);
             },
@@ -232,7 +227,6 @@ class _HomePageState extends State<HomePage> {
       ),
     );
   }
-  // ------------------------------------------------------------
 
   void _toggleTheme() {
     themeNotifier.value = themeNotifier.value == ThemeMode.light ? ThemeMode.dark : ThemeMode.light;
@@ -286,7 +280,7 @@ class _HomePageState extends State<HomePage> {
           isUser: false
         ));
         _isLoading = false;
-        _saveHistory(); // Salva a alteração
+        _saveHistory(); 
       });
       LogService().add('✅ SPOTIFAI: Curadoria concluída!');
       _scrollToBottom();
@@ -309,7 +303,7 @@ class _HomePageState extends State<HomePage> {
       _isLoading = true;
       _activeConversation.messages.add(ChatMessage(text: value, isUser: true));
       _searchController.clear();
-      _saveHistory(); // Salva a alteração
+      _saveHistory(); 
     });
     _scrollToBottom();
     LogService().add('👆 UI: Usuário enviou: "$value"');
@@ -381,7 +375,7 @@ class _HomePageState extends State<HomePage> {
           _activeConversation.tracks = newTracks;
           _activeConversation.title = playlistData['title'] ?? _activeConversation.title;
           _isLoading = false;
-          _saveHistory(); // Salva a alteração
+          _saveHistory(); 
         });
         
         LogService().add('✅ SPOTIFAI: Curadoria concluída!');
@@ -393,7 +387,7 @@ class _HomePageState extends State<HomePage> {
         setState(() {
           _activeConversation.messages.add(ChatMessage(text: 'Falha no sistema. Abra os logs.', isUser: false));
           _isLoading = false;
-          _saveHistory(); // Salva a alteração
+          _saveHistory(); 
         });
         LogService().add('✅ SPOTIFAI: Curadoria concluída!'); 
         _scrollToBottom();
@@ -448,7 +442,7 @@ class _HomePageState extends State<HomePage> {
         setState(() { 
           _isListening = true; 
           _searchController.clear(); 
-          _lastPollutedText = ""; // Zera o lixeiro sempre que ligar o mic
+          _lastPollutedText = ""; 
         });
         
         _speech.listen(
@@ -456,7 +450,6 @@ class _HomePageState extends State<HomePage> {
             setState(() {
               String recognized = val.recognizedWords;
 
-              // O FILTRO MATEMÁTICO CIRÚRGICO
               if (kIsWeb && defaultTargetPlatform == TargetPlatform.android) {
                 if (_lastPollutedText.isNotEmpty && recognized.startsWith(_lastPollutedText)) {
                   String extracted = recognized.substring(_lastPollutedText.length);
@@ -475,7 +468,6 @@ class _HomePageState extends State<HomePage> {
             });
           }, 
           localeId: 'pt-BR',
-          // A NOVA CAIXA DE OPÇÕES DA VERSÃO ATUALIZADA:
           listenOptions: stt.SpeechListenOptions(
             cancelOnError: true,
           ),
@@ -493,7 +485,7 @@ class _HomePageState extends State<HomePage> {
       _conversations.insert(0, _activeConversation);
       _searchController.clear();
       _urlController.clear();
-      _saveHistory(); // Salva a criação da nova conversa
+      _saveHistory(); 
     });
     Navigator.pop(context);
   }
@@ -516,22 +508,20 @@ class _HomePageState extends State<HomePage> {
           TextButton(
             onPressed: () {
               setState(() {
-                _conversations.remove(conv); // Remove da existência
+                _conversations.remove(conv); 
                 
-                // Se apagou tudo, cria uma nova em branco
                 if (_conversations.isEmpty) {
                   _activeConversation = ChatConversation(id: DateTime.now().millisecondsSinceEpoch.toString(), title: 'Nova Curadoria', messages: []);
                   _conversations.add(_activeConversation);
                 } 
-                // Se apagou a que estava aberta, pula pra próxima
                 else if (_activeConversation.id == conv.id) {
                   _activeConversation = _conversations.first;
                 }
                 
-                _saveHistory(); // Salva o novo estado no navegador
+                _saveHistory(); 
               });
-              Navigator.pop(context); // Fecha o alerta
-              Navigator.pop(context); // Fecha o menu lateral
+              Navigator.pop(context); 
+              Navigator.pop(context); 
             },
             child: const Text('Apagar', style: TextStyle(color: Colors.redAccent)),
           ),
@@ -559,7 +549,7 @@ class _HomePageState extends State<HomePage> {
             children: [
               Expanded(
                 child: AnimatedSwitcher(
-                  duration: const Duration(milliseconds: 1200),
+                  duration: const Duration(milliseconds: 800),
                   switchInCurve: Curves.easeOutCubic,
                   switchOutCurve: Curves.easeInCubic,
                   transitionBuilder: (Widget child, Animation<double> animation) {
@@ -571,9 +561,12 @@ class _HomePageState extends State<HomePage> {
                       ),
                     );
                   },
-                  child: !hasStarted
-                      ? SizedBox(key: const ValueKey('initial_state'), child: _buildInitialState(isDark)) 
-                      : SizedBox(key: const ValueKey('split_screen'), child: _buildSplitScreenResults(isDark, colors)),
+                  // --- MOTOR DE TELAS ATUALIZADO ---
+                  child: _isCopilotMode 
+                      ? SizedBox(key: const ValueKey('copilot_grid'), child: _buildCopilotGrid(isDark, colors))
+                      : (!hasStarted
+                          ? SizedBox(key: const ValueKey('initial_state'), child: _buildInitialState(isDark)) 
+                          : SizedBox(key: const ValueKey('split_screen'), child: _buildSplitScreenResults(isDark, colors))),
                 ),
               ),
               
@@ -616,7 +609,7 @@ class _HomePageState extends State<HomePage> {
                   AnimatedSize(
                     duration: const Duration(milliseconds: 600),
                     curve: Curves.easeInOutCubic,
-                    child: hasStarted 
+                    child: hasStarted || _isCopilotMode // Esconde o input no modo grade também
                       ? const SizedBox(width: double.infinity, height: 0) 
                       : Column(
                           children: [
@@ -689,7 +682,7 @@ class _HomePageState extends State<HomePage> {
   }
 
   PreferredSize _buildGlassAppBar(AppleKitColors colors, bool isDark) {
-    final bool hasStarted = _activeConversation.messages.isNotEmpty || _activeConversation.tracks.isNotEmpty;
+    final bool hasStarted = _activeConversation.messages.isNotEmpty || _activeConversation.tracks.isNotEmpty || _isCopilotMode;
 
     return PreferredSize(
       preferredSize: const Size.fromHeight(60),
@@ -846,7 +839,6 @@ class _HomePageState extends State<HomePage> {
         
         const SizedBox(height: 32),
         
-        // O NOSSO NOVO BOTÃO DE IGNIÇÃO
         AnimatedSwitcher(
           duration: const Duration(milliseconds: 300),
           child: _isLoadingCopilot 
@@ -870,7 +862,137 @@ class _HomePageState extends State<HomePage> {
       ]
     );
   }
-  
+
+  // --- NOVA INTERFACE: A GRADE DE MIXES DO SPOTIFY ---
+  Widget _buildCopilotGrid(bool isDark, AppleKitColors colors) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            IconButton(
+              icon: Icon(CupertinoIcons.back, color: isDark ? Colors.white : Colors.black),
+              onPressed: () => setState(() => _isCopilotMode = false),
+            ),
+            Expanded(
+              child: Text(
+                'Suas Descobertas', 
+                style: TextStyle(color: isDark ? Colors.white : Colors.black, fontSize: 24, fontWeight: FontWeight.bold),
+              ),
+            ),
+          ],
+        ),
+        Padding(
+          padding: const EdgeInsets.only(left: 48, bottom: 16),
+          child: Text('Escolha uma vibe baseada no seu gosto', style: TextStyle(color: isDark ? Colors.grey[400] : Colors.grey[600], fontSize: 14)),
+        ),
+        Expanded(
+          child: GridView.builder(
+            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: 2,
+              childAspectRatio: 0.9, // Quadrado puxando pro alto igual a imagem
+              crossAxisSpacing: 16,
+              mainAxisSpacing: 16,
+            ),
+            itemCount: _copilotVibes.length,
+            itemBuilder: (context, index) {
+              final item = _copilotVibes[index];
+              
+              // Garante a extração correta independentemente se for Map ou String pura
+              String vibe = '';
+              List<String> artists = [];
+              if (item is Map) {
+                vibe = item['vibe'] ?? 'Mix Desconhecido';
+                artists = List<String>.from(item['artists'] ?? []);
+              } else {
+                vibe = item.toString();
+              }
+
+              // Pega a cor correspondente na paleta circularmente
+              final Color cardColor = _mixColors[index % _mixColors.length];
+
+              return InkWell(
+                borderRadius: BorderRadius.circular(8),
+                onTap: () {
+                  LogService().add('👆 UI: Usuário selecionou a vibe: $vibe');
+                  // AQUI ENTRARÁ A PRÓXIMA FASE DE UX
+                },
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: cardColor,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  clipBehavior: Clip.hardEdge, // Corta a marca d'água nas bordas
+                  child: Stack(
+                    children: [
+                      // Marca d'água no canto superior direito para dar a estética Spotify
+                      Positioned(
+                        right: -24,
+                        top: -24,
+                        child: Transform.rotate(
+                          angle: -0.2,
+                          child: Icon(
+                            CupertinoIcons.music_albums_fill, // Substitui a geometria por um ícone sutil
+                            size: 110,
+                            color: Colors.white.withOpacity(0.08),
+                          ),
+                        ),
+                      ),
+                      // Ícone pequeno do Spotify/App no topo esquerdo
+                      Positioned(
+                        left: 12,
+                        top: 12,
+                        child: Icon(CupertinoIcons.play_circle_fill, color: Colors.white, size: 16),
+                      ),
+                      // Textos alinhados na base
+                      Padding(
+                        padding: const EdgeInsets.all(12.0),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisAlignment: MainAxisAlignment.end,
+                          children: [
+                            Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                // A barrinha vertical de destaque igual à imagem
+                                Container(
+                                  width: 4,
+                                  height: 18,
+                                  margin: const EdgeInsets.only(right: 6, top: 2),
+                                  decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(2)),
+                                ),
+                                Expanded(
+                                  child: Text(
+                                    vibe.replaceAll(RegExp(r'^[^\w\s]+'), '').trim(), // Remove o emoji se quiser um visual mais sério igual a imagem
+                                    style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold, height: 1.1),
+                                    maxLines: 2, overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 6),
+                            // Subtítulo com os artistas
+                            Text(
+                              artists.isNotEmpty ? artists.join(', ') : 'Para você.',
+                              style: TextStyle(color: Colors.white.withOpacity(0.75), fontSize: 12, height: 1.2),
+                              maxLines: 2, overflow: TextOverflow.ellipsis,
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
+      ],
+    );
+  }
+  // --------------------------------------------------------
+
   Widget _buildSplitScreenResults(bool isDark, AppleKitColors colors) {
     return Column(
       children: [
@@ -926,7 +1048,7 @@ class _HomePageState extends State<HomePage> {
                           onPressed: () {
                             setState(() {
                               track['locked'] = isLocked ? 'false' : 'true';
-                              _saveHistory(); // Salva a mudança do cadeado
+                              _saveHistory(); 
                             });
                           },
                         )
@@ -1010,7 +1132,6 @@ class _HomePageState extends State<HomePage> {
     );
   }
 }
-
 
 class LogsPage extends StatelessWidget {
   const LogsPage({super.key});
