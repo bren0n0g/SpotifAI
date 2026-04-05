@@ -72,6 +72,21 @@ class _HomePageState extends State<HomePage> {
   final TextEditingController _manualGenreController = TextEditingController();
   final ScrollController _chatScrollController = ScrollController();
 
+  // --- MÁQUINA DE ESTADOS DO COPILOTO ---
+  bool _isCopilotMode = false; 
+  int _copilotStep = 1; 
+  List<dynamic> _copilotVibes = []; 
+  List<String> _topArtistsCache = []; 
+  
+  String _selectedVibe = '';
+  List<String> _selectedArtists = [];
+  double _artistExploration = 0.0; // Começa em 0 (Seguro)
+  double _trackExploration = 0.0; // Começa em 0 (Hits)
+  
+  // Novo Controle de Ritmo
+  bool _isRhythmEnabled = true;
+  double _rhythmLevel = 2.0;
+
   bool _isListening = false;
   bool _isLoadingCopilot = false;
 
@@ -700,108 +715,41 @@ class _HomePageState extends State<HomePage> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
-          children: [
-            IconButton(
-              icon: Icon(
-                CupertinoIcons.back,
-                color: isDark ? Colors.white : Colors.black,
-              ),
-              onPressed: () {
-                if (_selectedArtists.isNotEmpty)
-                  setState(() => _copilotStep = 2);
-                else if (_manualGenreController.text.isNotEmpty)
-                  setState(() => _copilotStep = 3);
-                else
-                  setState(() => _copilotStep = 1);
-              },
-            ),
-            Expanded(
-              child: Text(
-                'Modo de Descoberta',
-                style: TextStyle(
-                  color: isDark ? Colors.white : Colors.black,
-                  fontSize: 24,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ),
-          ],
-        ),
-        Padding(
-          padding: const EdgeInsets.only(left: 48, bottom: 24),
-          child: Text(
-            'Ajuste o nível da sua playlist',
-            style: TextStyle(
-              color: isDark ? Colors.grey[400] : Colors.grey[600],
-              fontSize: 14,
-            ),
-          ),
-        ),
+        Row(children: [IconButton(icon: Icon(CupertinoIcons.back, color: isDark ? Colors.white : Colors.black), onPressed: () { if (_selectedArtists.isNotEmpty) setState(() => _copilotStep = 2); else if (_manualGenreController.text.isNotEmpty) setState(() => _copilotStep = 3); else setState(() => _copilotStep = 1); }), Expanded(child: Text('Painel de Mixagem', style: TextStyle(color: isDark ? Colors.white : Colors.black, fontSize: 24, fontWeight: FontWeight.bold)))]),
+        Padding(padding: const EdgeInsets.only(left: 48, bottom: 24), child: Text('Ajuste o nível da sua playlist', style: TextStyle(color: isDark ? Colors.grey[400] : Colors.grey[600], fontSize: 14))),
         Expanded(
-          child: ListView(
-            // ListView para evitar que os 3 Sliders não caibam em telas menores
+          child: ListView( 
             padding: const EdgeInsets.symmetric(horizontal: 24),
             children: [
-              _buildSliderSection(
-                'Variabilidade de Artistas',
-                'Tocar os de sempre',
-                'Explorar desconhecidos',
-                _artistExploration,
-                (val) => setState(() => _artistExploration = val),
-                isDark,
-              ),
+              _buildSliderSection('Variabilidade de Artistas', 'Apenas Selecionados', '100% Desconhecidos', _artistExploration, (val) => setState(() => _artistExploration = val), isDark),
               const SizedBox(height: 32),
-              _buildSliderSection(
-                'Variabilidade de Músicas',
-                'Apenas os Hits',
-                'Lados B e surpresas',
-                _trackExploration,
-                (val) => setState(() => _trackExploration = val),
-                isDark,
-              ),
+              _buildSliderSection('Variabilidade de Músicas', 'Apenas os Hits', 'Lados B Obscuros', _trackExploration, (val) => setState(() => _trackExploration = val), isDark),
               const SizedBox(height: 32),
-              _buildSliderSection(
-                'Energia e Acústica',
-                'Relax / Acústico',
-                'Fritar / Alta Energia',
-                _energyLevel,
-                (val) => setState(() => _energyLevel = val),
-                isDark,
+              
+              // O Controle de Ritmo com Switch
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text('Ritmo', style: TextStyle(color: isDark ? Colors.white : Colors.black, fontSize: 18, fontWeight: FontWeight.bold)),
+                  CupertinoSwitch(
+                    activeColor: const Color(0xFF1DB954),
+                    value: _isRhythmEnabled, 
+                    onChanged: (val) => setState(() => _isRhythmEnabled = val)
+                  )
+                ],
               ),
-              const SizedBox(height: 16),
+              const SizedBox(height: 8),
+              if (_isRhythmEnabled)
+                _buildSliderSection('', 'Acústico / Calmo', 'Fritar / Pesado', _rhythmLevel, (val) => setState(() => _rhythmLevel = val), isDark)
+              else
+                Padding(
+                  padding: const EdgeInsets.only(top: 8.0, bottom: 24.0),
+                  child: Text('Ritmo desabilitado. A IA escolherá livremente.', style: TextStyle(color: isDark ? Colors.grey[600] : Colors.grey[400], fontStyle: FontStyle.italic)),
+                ),
             ],
           ),
         ),
-        Padding(
-          padding: const EdgeInsets.only(
-            left: 16,
-            right: 16,
-            top: 8,
-            bottom: 8,
-          ),
-          child: SizedBox(
-            width: double.infinity,
-            child: ElevatedButton(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF1DB954),
-                padding: const EdgeInsets.symmetric(vertical: 16),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(30),
-                ),
-              ),
-              onPressed: _finishCopilotAndGenerate,
-              child: const Text(
-                'Continuar',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ),
-          ),
-        ),
+        Padding(padding: const EdgeInsets.only(left: 16, right: 16, top: 8, bottom: 8), child: SizedBox(width: double.infinity, child: ElevatedButton(style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF1DB954), padding: const EdgeInsets.symmetric(vertical: 16), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30))), onPressed: _finishCopilotAndGenerate, child: const Text('Gerar Curadoria', style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold))))),
       ],
     );
   }
@@ -868,99 +816,98 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-// --- MOTOR DE GERAÇÃO FINAL DO COPILOTO (MOVIDO A IA) ---
+// --- MOTOR DE GERAÇÃO FINAL DO COPILOTO (MATEMÁTICA ESTRITA) ---
   void _finishCopilotAndGenerate() async {
     setState(() {
-      _isCopilotMode = false; 
-      _isLoading = true; 
-      _searchController.clear();
+      _isCopilotMode = false; _isLoading = true; _searchController.clear();
       
-      // Monta uma mensagem bonita como se o usuário tivesse digitado o prompt
-      String summary = "🎵 Curadoria Guiada:\n\n";
-      if (_selectedVibe.isNotEmpty) summary += "• Vibe: $_selectedVibe\n";
-      if (_selectedArtists.isNotEmpty) summary += "• Artistas: ${_selectedArtists.join(', ')}\n";
-      summary += "• Explorar Artistas: Lvl ${_artistExploration.toInt()}\n";
-      summary += "• Explorar Músicas: Lvl ${_trackExploration.toInt()}\n";
-      summary += "• Nível de Energia: Lvl ${_energyLevel.toInt()}";
+      int artistPercent = (_artistExploration * 25).toInt();
+      String summary = "🎵 Curadoria Mixada:\n\n";
+      if (_selectedVibe.isNotEmpty) summary += "• Base: $_selectedVibe\n";
+      if (_selectedArtists.isNotEmpty) summary += "• Âncoras: ${_selectedArtists.join(', ')}\n";
+      summary += "• Artistas Novos: $artistPercent%\n";
+      summary += "• Músicas: Nível ${_trackExploration.toInt()} (Hits vs Lado B)\n";
+      summary += "• Ritmo: ${_isRhythmEnabled ? 'Nível ${_rhythmLevel.toInt()}' : 'Livre'}";
       
       _activeConversation.messages.add(ChatMessage(text: summary, isUser: true)); 
       _saveHistory();
     });
     
-    _scrollToBottom(); 
-    LogService().add('👆 UI: Finalizando Copiloto e chamando o motor da IA...');
+    _scrollToBottom(); LogService().add('👆 UI: Construindo Prompt Matemático...');
 
     try {
-      String base = _selectedVibe.isNotEmpty ? _selectedVibe : "Baseado nos artistas escolhidos.";
-      String artistas = _selectedArtists.isNotEmpty ? _selectedArtists.join(', ') : "Artistas relacionados à vibe.";
+      String base = _selectedVibe.isNotEmpty ? _selectedVibe : "Baseado nos artistas âncora.";
+      String artistas = _selectedArtists.isNotEmpty ? _selectedArtists.join(', ') : "O gênero base selecionado.";
       
-      // O SUPER PROMPT MATEMÁTICO INVISÍVEL
+      // 1. Cálculo de Porcentagem (Para 15 músicas)
+      int newArtistsPercent = (_artistExploration * 25).toInt(); // 0, 25, 50, 75, 100
+      int tracksFromSeeds = 15 - (15 * newArtistsPercent / 100).round();
+      int tracksFromNew = 15 - tracksFromSeeds;
+
+      // 2. Trava de Familiaridade (Hits vs Lado B)
+      String trackFamiliarity = "";
+      if (_trackExploration == 0) trackFamiliarity = "APENAS os maiores hits absolutos globais (Top 5 da carreira do artista).";
+      else if (_trackExploration == 1) trackFamiliarity = "Músicas famosas e singles conhecidos.";
+      else if (_trackExploration == 2) trackFamiliarity = "Metade hits conhecidos, metade faixas normais de álbuns.";
+      else if (_trackExploration == 3) trackFamiliarity = "Maioria de Lados B e faixas que nunca foram singles.";
+      else trackFamiliarity = "APENAS Lados B, deep cuts e músicas obscuras. NENHUM hit global permitido.";
+
+      // 3. Trava de Ritmo
+      String rhythmConstraint = _isRhythmEnabled
+          ? "- Ritmo/Energia (0=Acústico/Voz e Violão, 4=Fritar/Batida Pesada): O usuário definiu o Nível ${_rhythmLevel.toInt()}."
+          : "- Ritmo/Energia: LIVRE (Trava desabilitada).";
+
+      // O SUPER PROMPT
       String promptComContexto = """
       [COMANDO RESTRITO DO COPILOTO]
-      O usuário configurou uma curadoria matemática:
-      - Vibe: $base
-      - Artistas Âncora: $artistas
-      - Nível Descobrir Artistas (0=Famosos, 4=Obscuros): $_artistExploration
-      - Nível Descobrir Músicas (0=Hits, 4=Lado B): $_trackExploration
-      - Energia (0=Acústico/Relax/Calmo, 4=Fritar/Agitado/Rock Pesado): $_energyLevel
+      Você DEVE gerar uma playlist de exatamente 15 músicas reais do Spotify seguindo ESTAS REGRAS MATEMÁTICAS INQUEBRÁVEIS:
       
-      Você DEVE atuar como um curador mestre e criar uma playlist de exatamente 15 músicas reais do Spotify para esta equação. 
-      Retorne o formato JSON duplo com 'chat_reply' e 'playlist_update'.
+      BASE DA PLAYLIST:
+      - Vibe/Estilo: $base
+      - Artistas Âncora: $artistas
+      
+      REGRA DE ARTISTAS (Variabilidade de $newArtistsPercent%):
+      - Você DEVE incluir EXATAMENTE $tracksFromSeeds músicas dos "Artistas Âncora" listados acima.
+      - Você DEVE incluir EXATAMENTE $tracksFromNew músicas de OUTROS artistas relacionados à vibe.
+      *(Se a variabilidade for 0%, use apenas os artistas âncora).*
+      
+      REGRA DE MÚSICAS:
+      - $trackFamiliarity
+      
+      REGRA DE RITMO:
+      $rhythmConstraint
+      
+      Retorne APENAS o formato JSON duplo com 'chat_reply' e 'playlist_update'.
       """;
 
       final aiResult = await AiService().generatePlaylist(promptComContexto);
 
       if (aiResult != null && mounted) {
-        final chatReply = aiResult['chat_reply'] ?? 'A mágica está feita! Aqui está sua nova curadoria.';
+        final chatReply = aiResult['chat_reply'] ?? 'A mixagem está pronta! Avalie os resultados.';
         final playlistData = aiResult['playlist_update'] ?? aiResult; 
         List<Map<String, String>> newTracks = [];
 
         if (playlistData['tracks'] != null) {
           final rawTracks = playlistData['tracks'] as List;
-          LogService().add('🔍 SPOTIFY: Buscando metadados para ${rawTracks.length} músicas geradas pelo Copiloto...');
-          
+          LogService().add('🔍 SPOTIFY: Verificando as ${rawTracks.length} faixas geradas...');
           for (var t in rawTracks) {
-            String trackTitle = t['title'] ?? t['titulo'] ?? t['nome'] ?? 'Sem título';
-            String trackArtist = t['artist'] ?? t['artista'] ?? t['banda'] ?? 'Desconhecido';
+            String trackTitle = t['title'] ?? t['titulo'] ?? t['nome'] ?? '';
+            String trackArtist = t['artist'] ?? t['artista'] ?? t['banda'] ?? '';
             try {
               final spotifyData = await SpotifyService().searchTrack(trackTitle, trackArtist);
-              newTracks.add({
-                'title': trackTitle, 
-                'artist': trackArtist, 
-                'id': spotifyData?['id'] ?? '', 
-                'image': spotifyData?['image'] ?? '', 
-                'locked': 'false'
-              });
-            } catch (e) { 
-              newTracks.add({'title': trackTitle, 'artist': trackArtist, 'id': '', 'image': '', 'locked': 'false'}); 
-            }
+              newTracks.add({'title': trackTitle, 'artist': trackArtist, 'id': spotifyData?['id'] ?? '', 'image': spotifyData?['image'] ?? '', 'locked': 'false'});
+            } catch (e) { newTracks.add({'title': trackTitle, 'artist': trackArtist, 'id': '', 'image': '', 'locked': 'false'}); }
           }
         }
-        
-        setState(() { 
-          _activeConversation.messages.add(ChatMessage(text: chatReply, isUser: false)); 
-          _activeConversation.tracks = newTracks; 
-          _activeConversation.title = playlistData['title'] ?? "Playlist Copiloto"; 
-          _isLoading = false; 
-          _saveHistory(); 
-        });
-        
-        LogService().add('✅ SPOTIFAI: Curadoria concluída com sucesso!'); 
-        _scrollToBottom();
+        setState(() { _activeConversation.messages.add(ChatMessage(text: chatReply, isUser: false)); _activeConversation.tracks = newTracks; _activeConversation.title = playlistData['title'] ?? "Mix SpotifAI"; _isLoading = false; _saveHistory(); });
+        LogService().add('✅ SPOTIFAI: Curadoria mixada finalizada!'); _scrollToBottom();
       }
     } catch (e) {
-      LogService().add('❌ ERRO CRÍTICO NO COPILOTO: $e');
-      if (mounted) { 
-        setState(() { 
-          _activeConversation.messages.add(ChatMessage(text: 'A IA teve um erro processando as métricas.', isUser: false)); 
-          _isLoading = false; 
-          _saveHistory(); 
-        }); 
-        _scrollToBottom(); 
-      }
+      LogService().add('❌ ERRO CRÍTICO NA MIXAGEM: $e');
+      if (mounted) { setState(() { _activeConversation.messages.add(ChatMessage(text: 'Ocorreu um erro no cálculo da IA.', isUser: false)); _isLoading = false; _saveHistory(); }); _scrollToBottom(); }
     }
   }
-    
+  
   void _submitSearch(String value) async {
     if (value.isEmpty || _isLoading) return;
     FocusScope.of(context).unfocus();
