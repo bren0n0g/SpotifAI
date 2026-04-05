@@ -82,29 +82,30 @@ class AiService {
 
   /// Transforma a lista de artistas favoritos do usuário em 6 botões detalhados
   Future<List<Map<String, dynamic>>> generateDynamicVibes(List<String> topArtists, {String? userHint}) async {
-    final List<Map<String, dynamic>> fallbackVibes = List.generate(6, (index) => {"vibe": "🎧 Vibe Padrão", "artists": ["Artista 1"]});
+    // Agora o plano B gera 10 opções para não quebrar a tela
+    final List<Map<String, dynamic>> fallbackVibes = List.generate(10, (index) => {"vibe": "🎧 Vibe Padrão ${index + 1}", "artists": ["Artista 1", "Artista 2", "Artista 3"]});
     if (topArtists.isEmpty) return fallbackVibes;
 
-    // Se o usuário der um pitaco no chat, a IA recebe essa instrução extra
     String hintInstruction = userHint != null && userHint.isNotEmpty 
-        ? "\nREGRA EXTRA DO USUÁRIO: O usuário pediu a seguinte modificação nas opções: '$userHint'. Ajuste as 5 categorias para respeitar estritamente esse pedido." 
+        ? "\nREGRA EXTRA DO USUÁRIO: O usuário pediu a seguinte modificação nas opções: '$userHint'. Ajuste as 9 categorias para respeitar estritamente esse pedido." 
         : "";
 
     String prompt = """
     Você é um curador musical. O usuário ouve: ${topArtists.join(', ')}.$hintInstruction
-    Crie 5 categorias (vibes musicais) curtas com base no gosto dele (ou no pedido extra, se houver). 
-    A 6ª categoria DEVE ser "🎲 Surpreenda-me".
+    Crie 9 categorias (vibes musicais) curtas com base no gosto dele (ou no pedido extra, se houver). 
+    A 10ª categoria DEVE ser "🎲 Surpreenda-me".
     Para CADA categoria, escolha exatamente 3 artistas que representem essa vibe.
     
-    IMPORTANTE: Responda APENAS com um array JSON. Sem formatação markdown.
+    IMPORTANTE: Responda APENAS com um array JSON contendo EXATAMENTE 10 objetos. Sem formatação markdown.
     Exemplo exato:
     [
-      {"vibe": "🎸 Rock Clássico", "artists": ["AC/DC", "Queen", "Led Zeppelin"]}
+      {"vibe": "🎸 Rock Clássico", "artists": ["AC/DC", "Queen", "Led Zeppelin"]},
+      {"vibe": "🌧️ Sad R&B", "artists": ["The Weeknd", "Joji", "Chase Atlantic"]}
     ]
     """;
 
     try {
-      LogService().add('🧠 AI: Gerando grade de vibes...');
+      LogService().add('🧠 AI: Gerando grade expandida de vibes (10 opções)...');
       String responseText = await _generateTextFromGemini(prompt); 
       responseText = responseText.replaceAll('```json', '').replaceAll('```', '').trim();
       List<dynamic> decodedArray = jsonDecode(responseText);
@@ -113,12 +114,15 @@ class AiService {
         "artists": (e["artists"] as List).map((a) => a.toString()).toList()
       }).toList();
       
-      if (vibes.length >= 6) return vibes.take(6).toList(); 
+      // Pega as 10 opções
+      if (vibes.length >= 10) return vibes.take(10).toList(); 
       return fallbackVibes;
     } catch (e) {
+      LogService().add('❌ ERRO AI: $e');
       return fallbackVibes;
     }
   }
+  
   /// Função interna de apoio para chamadas rápidas e diretas ao Gemini
   Future<String> _generateTextFromGemini(String prompt) async {
     try {
