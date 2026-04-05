@@ -90,18 +90,6 @@ class _HomePageState extends State<HomePage> {
 
   bool _isListening = false;
   bool _isLoadingCopilot = false;
-
-  bool _isCopilotMode = false;
-  int _copilotStep = 1;
-  List<dynamic> _copilotVibes = [];
-  List<String> _topArtistsCache = [];
-
-  String _selectedVibe = '';
-  List<String> _selectedArtists = [];
-  double _artistExploration = 2.0;
-  double _trackExploration = 2.0;
-  double _energyLevel = 2.0; // Slider 3: Energia
-
   final List<Color> _mixColors = [
     const Color(0xFF985310),
     const Color(0xFF3A5A78),
