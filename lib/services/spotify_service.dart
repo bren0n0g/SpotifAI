@@ -54,7 +54,7 @@ class SpotifyService {
     // O DESVIO INTELIGENTE: Se for Web, usa o localhost temporário. Se for Mobile, usa o .env
     final redirectUri = 'https://spotifai.brenomachado2003.workers.dev/callback.html';
 
-    final String scope = 'playlist-modify-public playlist-modify-private playlist-read-private user-read-private user-read-email';
+    final String scope = 'playlist-modify-public playlist-modify-private playlist-read-private user-read-private user-read-email user-top-read';
     final url = Uri.https(_accountsDomain, '/authorize', {
       'client_id': clientId,
       'response_type': 'code',
@@ -258,6 +258,42 @@ class SpotifyService {
     } catch (e) {
       LogService().add('❌ SPOTIFY EXCEÇÃO: $e');
       return false;
+    }
+  }
+  /// Extrai os artistas favoritos do usuário para alimentar a IA do modo "Estou com Sorte"
+  Future<List<String>> getUserTopArtists({int limit = 30}) async {
+    if (!isLogged) {
+      LogService().add('⚠️ SPOTIFY: Tentou buscar Top Artistas sem estar logado.');
+      return [];
+    }
+
+    // medium_term = calcula com base nos últimos 6 meses.
+    final url = Uri.parse('https://api.spotify.com/v1/me/top/artists?limit=$limit&time_range=medium_term');
+
+    try {
+      LogService().add('🔍 SPOTIFY: Analisando o DNA musical do usuário...');
+      
+      final response = await http.get(
+        url,
+        headers: {'Authorization': 'Bearer $_accessToken'},
+      );
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        final items = data['items'] as List;
+        
+        // Mapeia o JSON puxando apenas o nome de cada artista
+        List<String> topArtists = items.map((item) => item['name'].toString()).toList();
+        
+        LogService().add('✅ SPOTIFY: DNA Extraído! Top $limit: ${topArtists.join(", ")}');
+        return topArtists;
+      } else {
+        LogService().add('❌ ERRO SPOTIFY: Falha ao puxar Top Artistas (Status: ${response.statusCode})');
+        return [];
+      }
+    } catch (e) {
+      LogService().add('❌ ERRO CRÍTICO SPOTIFY: Falha de rede ao buscar Top Artistas: $e');
+      return [];
     }
   }
 }
