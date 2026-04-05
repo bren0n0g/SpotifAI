@@ -868,84 +868,99 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  // --- MOTOR FINAL ---
-  // --- MOTOR FINAL (AGORA USANDO API NATIVA DO SPOTIFY) ---
+// --- MOTOR DE GERAÇÃO FINAL DO COPILOTO (MOVIDO A IA) ---
   void _finishCopilotAndGenerate() async {
     setState(() {
-      _isCopilotMode = false; _isLoading = true; _searchController.clear();
-      String summary = "🎵 Curadoria Guiada (Motor Nativo):\n\n";
+      _isCopilotMode = false; 
+      _isLoading = true; 
+      _searchController.clear();
+      
+      // Monta uma mensagem bonita como se o usuário tivesse digitado o prompt
+      String summary = "🎵 Curadoria Guiada:\n\n";
       if (_selectedVibe.isNotEmpty) summary += "• Vibe: $_selectedVibe\n";
       if (_selectedArtists.isNotEmpty) summary += "• Artistas: ${_selectedArtists.join(', ')}\n";
       summary += "• Explorar Artistas: Lvl ${_artistExploration.toInt()}\n";
       summary += "• Explorar Músicas: Lvl ${_trackExploration.toInt()}\n";
       summary += "• Nível de Energia: Lvl ${_energyLevel.toInt()}";
-      _activeConversation.messages.add(ChatMessage(text: summary, isUser: true)); _saveHistory();
+      
+      _activeConversation.messages.add(ChatMessage(text: summary, isUser: true)); 
+      _saveHistory();
     });
     
     _scrollToBottom(); 
-    LogService().add('👆 UI: Finalizando Copiloto. Traduzindo matemática para o Spotify...');
+    LogService().add('👆 UI: Finalizando Copiloto e chamando o motor da IA...');
 
     try {
-      // 1. CONVERSÃO MATEMÁTICA DOS SLIDERS
-      // Popularidade vai de 0 a 100.
-      // Se a exploração total for máxima (4+4=8), a popularidade cai para 10 (Músicas super desconhecidas).
-      // Se a exploração total for mínima (0), a popularidade sobe para 90 (Hits globais).
-      double totalExploration = _artistExploration + _trackExploration;
-      int targetPop = 90 - (totalExploration * 10).toInt();
-
-      // Energia vai de 0.0 a 1.0 na API. O slider é de 0 a 4.
-      double targetEng = (_energyLevel / 4.0) * 0.8 + 0.1; // Fica entre 0.1 e 0.9
-
-      // 2. BUSCA DAS SEMENTES (ARTISTAS)
-      List<String> seedArtistIds = [];
+      String base = _selectedVibe.isNotEmpty ? _selectedVibe : "Baseado nos artistas escolhidos.";
+      String artistas = _selectedArtists.isNotEmpty ? _selectedArtists.join(', ') : "Artistas relacionados à vibe.";
       
-      // Se ele selecionou artistas da lista:
-      if (_selectedArtists.isNotEmpty) {
-        LogService().add('🔍 SPOTIFY: Convertendo os nomes escolhidos em IDs...');
-        for (String artistName in _selectedArtists.take(3)) {
-          String? id = await SpotifyService().searchArtistId(artistName);
-          if (id != null) seedArtistIds.add(id);
+      // O SUPER PROMPT MATEMÁTICO INVISÍVEL
+      String promptComContexto = """
+      [COMANDO RESTRITO DO COPILOTO]
+      O usuário configurou uma curadoria matemática:
+      - Vibe: $base
+      - Artistas Âncora: $artistas
+      - Nível Descobrir Artistas (0=Famosos, 4=Obscuros): $_artistExploration
+      - Nível Descobrir Músicas (0=Hits, 4=Lado B): $_trackExploration
+      - Energia (0=Acústico/Relax/Calmo, 4=Fritar/Agitado/Rock Pesado): $_energyLevel
+      
+      Você DEVE atuar como um curador mestre e criar uma playlist de exatamente 15 músicas reais do Spotify para esta equação. 
+      Retorne o formato JSON duplo com 'chat_reply' e 'playlist_update'.
+      """;
+
+      final aiResult = await AiService().generatePlaylist(promptComContexto);
+
+      if (aiResult != null && mounted) {
+        final chatReply = aiResult['chat_reply'] ?? 'A mágica está feita! Aqui está sua nova curadoria.';
+        final playlistData = aiResult['playlist_update'] ?? aiResult; 
+        List<Map<String, String>> newTracks = [];
+
+        if (playlistData['tracks'] != null) {
+          final rawTracks = playlistData['tracks'] as List;
+          LogService().add('🔍 SPOTIFY: Buscando metadados para ${rawTracks.length} músicas geradas pelo Copiloto...');
+          
+          for (var t in rawTracks) {
+            String trackTitle = t['title'] ?? t['titulo'] ?? t['nome'] ?? 'Sem título';
+            String trackArtist = t['artist'] ?? t['artista'] ?? t['banda'] ?? 'Desconhecido';
+            try {
+              final spotifyData = await SpotifyService().searchTrack(trackTitle, trackArtist);
+              newTracks.add({
+                'title': trackTitle, 
+                'artist': trackArtist, 
+                'id': spotifyData?['id'] ?? '', 
+                'image': spotifyData?['image'] ?? '', 
+                'locked': 'false'
+              });
+            } catch (e) { 
+              newTracks.add({'title': trackTitle, 'artist': trackArtist, 'id': '', 'image': '', 'locked': 'false'}); 
+            }
+          }
         }
-      } 
-      // Se ele digitou manualmente e não tem artistas selecionados:
-      else if (_selectedVibe.isNotEmpty) {
-        LogService().add('🧠 AI: Traduzindo a Vibe "$_selectedVibe" em artistas âncora...');
-        List<String> suggestedArtists = await AiService().getArtistsForVibe(_selectedVibe);
-        for (String artistName in suggestedArtists.take(2)) {
-          String? id = await SpotifyService().searchArtistId(artistName);
-          if (id != null) seedArtistIds.add(id);
-        }
+        
+        setState(() { 
+          _activeConversation.messages.add(ChatMessage(text: chatReply, isUser: false)); 
+          _activeConversation.tracks = newTracks; 
+          _activeConversation.title = playlistData['title'] ?? "Playlist Copiloto"; 
+          _isLoading = false; 
+          _saveHistory(); 
+        });
+        
+        LogService().add('✅ SPOTIFAI: Curadoria concluída com sucesso!'); 
+        _scrollToBottom();
       }
-
-      // 3. O TIRO DE CANHÃO (RECOMENDAÇÕES)
-      LogService().add('🎯 SPOTIFY: Puxando músicas (Pop: $targetPop, Energia: $targetEng)...');
-      List<Map<String, String>> newTracks = await SpotifyService().getRecommendations(
-        seedArtists: seedArtistIds,
-        targetEnergy: targetEng,
-        targetPopularity: targetPop,
-      );
-
-      setState(() { 
-        _activeConversation.messages.add(ChatMessage(text: "Pronto! Acessei a base acústica do Spotify e montei a playlist perfeitamente alinhada com os níveis de exploração e energia que você calibrou.", isUser: false)); 
-        _activeConversation.tracks = newTracks; 
-        
-        // Título bonito baseado no que ele escolheu
-        String finalTitle = _selectedVibe.isNotEmpty ? _selectedVibe : "Mix Especial";
-        if (finalTitle.length > 20) finalTitle = finalTitle.substring(0, 20); // Limite de tamanho
-        _activeConversation.title = "$finalTitle Copilot"; 
-        
-        _isLoading = false; 
-        _saveHistory(); 
-      });
-      LogService().add('✅ SPOTIFAI: Curadoria nativa concluída em tempo recorde!'); 
-      _scrollToBottom();
-      
     } catch (e) {
-      LogService().add('❌ ERRO CRÍTICO NO MOTOR: $e');
-      if (mounted) { setState(() { _activeConversation.messages.add(ChatMessage(text: 'Tivemos um problema contatando a engenharia do Spotify. Tente novamente.', isUser: false)); _isLoading = false; _saveHistory(); }); _scrollToBottom(); }
+      LogService().add('❌ ERRO CRÍTICO NO COPILOTO: $e');
+      if (mounted) { 
+        setState(() { 
+          _activeConversation.messages.add(ChatMessage(text: 'A IA teve um erro processando as métricas.', isUser: false)); 
+          _isLoading = false; 
+          _saveHistory(); 
+        }); 
+        _scrollToBottom(); 
+      }
     }
   }
-  
+    
   void _submitSearch(String value) async {
     if (value.isEmpty || _isLoading) return;
     FocusScope.of(context).unfocus();
