@@ -122,7 +122,20 @@ class AiService {
       return fallbackVibes;
     }
   }
-  
+
+  /// Traduz uma vibe manual em 2 artistas para servir de semente no Spotify
+  Future<List<String>> getArtistsForVibe(String vibe) async {
+    String prompt = "O usuário quer uma playlist com a vibe: '$vibe'. Me retorne APENAS um array JSON com os nomes de 2 artistas reais do Spotify que representem essa vibe perfeitamente. Exemplo: [\"The Weeknd\", \"Kavinsky\"]. Nenhuma outra palavra.";
+    try {
+      String responseText = await _generateTextFromGemini(prompt);
+      responseText = responseText.replaceAll('```json', '').replaceAll('```', '').trim();
+      List<dynamic> decodedArray = jsonDecode(responseText);
+      return decodedArray.map((e) => e.toString()).toList();
+    } catch (e) {
+      return ["Coldplay", "The Weeknd"]; // Fallback de emergência
+    }
+  }
+
   /// Função interna de apoio para chamadas rápidas e diretas ao Gemini
   Future<String> _generateTextFromGemini(String prompt) async {
     try {

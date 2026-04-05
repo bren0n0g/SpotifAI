@@ -296,4 +296,63 @@ class SpotifyService {
       return [];
     }
   }
+
+  /// Busca apenas o ID de um artista pelo nome
+  Future<String?> searchArtistId(String artistName) async {
+    final url = Uri.parse('https://api.spotify.com/v1/search?q=track:$title artist:$artistName&type=artist&limit=1');
+    try {
+      final response = await http.get(url, headers: {'Authorization': 'Bearer $_accessToken'});
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        if (data['artists']['items'].isNotEmpty) {
+          return data['artists']['items'][0]['id'];
+        }
+      }
+      return null;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  /// O Motor de Busca Nativo do Spotify (Bypassa a IA)
+  Future<List<Map<String, String>>> getRecommendations({
+    required List<String> seedArtists,
+    required double targetEnergy,
+    required int targetPopularity,
+  }) async {
+    // O Spotify exige que os IDs sejam separados por vírgula
+    String seeds = seedArtists.join(',');
+    
+    // Monta a URL com a matemática exata dos seus sliders
+    final url = Uri.parse('https://developer.spotify.com/documentation/web-api/concepts/rate-limits3'
+        'limit=15'
+        '&seed_artists=$seeds'
+        '&target_energy=$targetEnergy'
+        '&target_popularity=$targetPopularity');
+
+    try {
+      final response = await http.get(url, headers: {'Authorization': 'Bearer $_accessToken'});
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        List<Map<String, String>> tracks = [];
+        
+        for (var t in data['tracks']) {
+          tracks.add({
+            'title': t['name'] ?? 'Sem título',
+            'artist': t['artists'][0]['name'] ?? 'Desconhecido',
+            'id': t['uri'] ?? '',
+            'image': t['album']['images'].isNotEmpty ? t['album']['images'][0]['url'] : '',
+            'locked': 'false',
+          });
+        }
+        return tracks;
+      } else {
+        throw Exception('Erro na API de recomendações: ${response.body}');
+      }
+    } catch (e) {
+      LogService().add('❌ ERRO Recomendação: $e');
+      throw e;
+    }
+  }
+  
 }
