@@ -82,7 +82,8 @@ class _HomePageState extends State<HomePage> {
   List<String> _selectedArtists = [];
   double _artistExploration = 0.0; // Começa em 0 (Seguro)
   double _trackExploration = 0.0; // Começa em 0 (Hits)
-  
+  double _trackCount = 20.0; // Valor inicial (pode ser 20, 40, 60, 80 ou 100)
+
   // Novo Controle de Ritmo
   bool _isRhythmEnabled = true;
   double _rhythmLevel = 2.0;
@@ -716,26 +717,28 @@ class _HomePageState extends State<HomePage> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Row(children: [IconButton(icon: Icon(CupertinoIcons.back, color: isDark ? Colors.white : Colors.black), onPressed: () { if (_selectedArtists.isNotEmpty) setState(() => _copilotStep = 2); else if (_manualGenreController.text.isNotEmpty) setState(() => _copilotStep = 3); else setState(() => _copilotStep = 1); }), Expanded(child: Text('Painel de Mixagem', style: TextStyle(color: isDark ? Colors.white : Colors.black, fontSize: 24, fontWeight: FontWeight.bold)))]),
-        Padding(padding: const EdgeInsets.only(left: 48, bottom: 24), child: Text('Ajuste o nível da sua playlist', style: TextStyle(color: isDark ? Colors.grey[400] : Colors.grey[600], fontSize: 14))),
+        Padding(padding: const EdgeInsets.only(left: 48, bottom: 24), child: Text('Ajuste os detalhes da sua playlist', style: TextStyle(color: isDark ? Colors.grey[400] : Colors.grey[600], fontSize: 14))),
         Expanded(
           child: ListView( 
             padding: const EdgeInsets.symmetric(horizontal: 24),
             children: [
+              // --- NOVO BOX DE QUANTIDADE ---
+              Text('Tamanho da Playlist', style: TextStyle(color: isDark ? Colors.white : Colors.black, fontSize: 18, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 16),
+              _buildTrackCountSelector(isDark),
+              const SizedBox(height: 40),
+              // ------------------------------
+
               _buildSliderSection('Variabilidade de Artistas', 'Apenas Selecionados', '100% Desconhecidos', _artistExploration, (val) => setState(() => _artistExploration = val), isDark),
               const SizedBox(height: 32),
               _buildSliderSection('Variabilidade de Músicas', 'Apenas os Hits', 'Lados B Obscuros', _trackExploration, (val) => setState(() => _trackExploration = val), isDark),
               const SizedBox(height: 32),
               
-              // O Controle de Ritmo com Switch
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Text('Ritmo', style: TextStyle(color: isDark ? Colors.white : Colors.black, fontSize: 18, fontWeight: FontWeight.bold)),
-                  CupertinoSwitch(
-                    activeColor: const Color(0xFF1DB954),
-                    value: _isRhythmEnabled, 
-                    onChanged: (val) => setState(() => _isRhythmEnabled = val)
-                  )
+                  CupertinoSwitch(activeColor: const Color(0xFF1DB954), value: _isRhythmEnabled, onChanged: (val) => setState(() => _isRhythmEnabled = val))
                 ],
               ),
               const SizedBox(height: 8),
@@ -750,6 +753,45 @@ class _HomePageState extends State<HomePage> {
           ),
         ),
         Padding(padding: const EdgeInsets.only(left: 16, right: 16, top: 8, bottom: 8), child: SizedBox(width: double.infinity, child: ElevatedButton(style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF1DB954), padding: const EdgeInsets.symmetric(vertical: 16), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30))), onPressed: _finishCopilotAndGenerate, child: const Text('Gerar Curadoria', style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold))))),
+      ],
+    );
+  }
+
+  // Componente visual para o seletor de 20 a 100
+  Widget _buildTrackCountSelector(bool isDark) {
+    return Column(
+      children: [
+        SliderTheme(
+          data: SliderThemeData(
+            activeTrackColor: const Color(0xFF1DB954),
+            inactiveTrackColor: isDark ? Colors.grey[800] : Colors.grey[300],
+            thumbColor: Colors.white,
+            overlayColor: const Color(0xFF1DB954).withOpacity(0.2),
+            valueIndicatorShape: const PaddleSliderValueIndicatorShape(),
+            valueIndicatorColor: const Color(0xFF1DB954),
+            valueIndicatorTextStyle: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+          ),
+          child: Slider(
+            value: _trackCount,
+            min: 20, max: 100, divisions: 4, // 20, 40, 60, 80, 100
+            label: '${_trackCount.toInt()} músicas',
+            onChanged: (val) => setState(() => _trackCount = val),
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [20, 40, 60, 80, 100].map((n) => Text(
+              '$n', 
+              style: TextStyle(
+                color: _trackCount.toInt() == n ? const Color(0xFF1DB954) : Colors.grey,
+                fontWeight: _trackCount.toInt() == n ? FontWeight.bold : FontWeight.normal,
+                fontSize: 12
+              )
+            )).toList(),
+          ),
+        )
       ],
     );
   }
@@ -816,13 +858,15 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-// --- MOTOR DE GERAÇÃO FINAL DO COPILOTO (MATEMÁTICA ESTRITA) ---
-  void _finishCopilotAndGenerate() async {
+void _finishCopilotAndGenerate() async {
     setState(() {
       _isCopilotMode = false; _isLoading = true; _searchController.clear();
       
+      int totalTracks = _trackCount.toInt();
       int artistPercent = (_artistExploration * 25).toInt();
+      
       String summary = "🎵 Curadoria Mixada:\n\n";
+      summary += "• Quantidade: $totalTracks músicas\n";
       if (_selectedVibe.isNotEmpty) summary += "• Base: $_selectedVibe\n";
       if (_selectedArtists.isNotEmpty) summary += "• Âncoras: ${_selectedArtists.join(', ')}\n";
       summary += "• Artistas Novos: $artistPercent%\n";
@@ -833,18 +877,19 @@ class _HomePageState extends State<HomePage> {
       _saveHistory();
     });
     
-    _scrollToBottom(); LogService().add('👆 UI: Construindo Prompt Matemático...');
+    _scrollToBottom(); LogService().add('👆 UI: Construindo Prompt Matemático para ${_trackCount.toInt()} músicas...');
 
     try {
       String base = _selectedVibe.isNotEmpty ? _selectedVibe : "Baseado nos artistas âncora.";
       String artistas = _selectedArtists.isNotEmpty ? _selectedArtists.join(', ') : "O gênero base selecionado.";
       
-      // 1. Cálculo de Porcentagem (Para 15 músicas)
-      int newArtistsPercent = (_artistExploration * 25).toInt(); // 0, 25, 50, 75, 100
-      int tracksFromSeeds = 15 - (15 * newArtistsPercent / 100).round();
-      int tracksFromNew = 15 - tracksFromSeeds;
+      // 1. Cálculo de Porcentagem baseado na quantidade escolhida
+      int totalTracks = _trackCount.toInt();
+      int newArtistsPercent = (_artistExploration * 25).toInt(); 
+      int tracksFromSeeds = totalTracks - (totalTracks * newArtistsPercent / 100).round();
+      int tracksFromNew = totalTracks - tracksFromSeeds;
 
-      // 2. Trava de Familiaridade (Hits vs Lado B)
+      // 2. Trava de Familiaridade
       String trackFamiliarity = "";
       if (_trackExploration == 0) trackFamiliarity = "APENAS os maiores hits absolutos globais (Top 5 da carreira do artista).";
       else if (_trackExploration == 1) trackFamiliarity = "Músicas famosas e singles conhecidos.";
@@ -854,13 +899,13 @@ class _HomePageState extends State<HomePage> {
 
       // 3. Trava de Ritmo
       String rhythmConstraint = _isRhythmEnabled
-          ? "- Ritmo/Energia (0=Acústico/Voz e Violão, 4=Fritar/Batida Pesada): O usuário definiu o Nível ${_rhythmLevel.toInt()}."
-          : "- Ritmo/Energia: LIVRE (Trava desabilitada).";
+          ? "- Ritmo/Energia (0=Acústico, 4=Fritar): O usuário definiu o Nível ${_rhythmLevel.toInt()}."
+          : "- Ritmo/Energia: LIVRE.";
 
-      // O SUPER PROMPT
+      // O SUPER PROMPT ATUALIZADO
       String promptComContexto = """
       [COMANDO RESTRITO DO COPILOTO]
-      Você DEVE gerar uma playlist de exatamente 15 músicas reais do Spotify seguindo ESTAS REGRAS MATEMÁTICAS INQUEBRÁVEIS:
+      Você DEVE gerar uma playlist de EXATAMENTE $totalTracks músicas reais do Spotify seguindo ESTAS REGRAS MATEMÁTICAS:
       
       BASE DA PLAYLIST:
       - Vibe/Estilo: $base
@@ -868,8 +913,8 @@ class _HomePageState extends State<HomePage> {
       
       REGRA DE ARTISTAS (Variabilidade de $newArtistsPercent%):
       - Você DEVE incluir EXATAMENTE $tracksFromSeeds músicas dos "Artistas Âncora" listados acima.
-      - Você DEVE incluir EXATAMENTE $tracksFromNew músicas de OUTROS artistas relacionados à vibe.
-      *(Se a variabilidade for 0%, use apenas os artistas âncora).*
+      - Você DEVE incluir EXATAMENTE $tracksFromNew músicas de OUTROS artistas relacionados.
+      *(Se a variabilidade for 0%, use apenas os artistas âncora para as $totalTracks músicas).*
       
       REGRA DE MÚSICAS:
       - $trackFamiliarity
@@ -883,7 +928,7 @@ class _HomePageState extends State<HomePage> {
       final aiResult = await AiService().generatePlaylist(promptComContexto);
 
       if (aiResult != null && mounted) {
-        final chatReply = aiResult['chat_reply'] ?? 'A mixagem está pronta! Avalie os resultados.';
+        final chatReply = aiResult['chat_reply'] ?? 'Mixagem concluída!';
         final playlistData = aiResult['playlist_update'] ?? aiResult; 
         List<Map<String, String>> newTracks = [];
 
@@ -904,7 +949,7 @@ class _HomePageState extends State<HomePage> {
       }
     } catch (e) {
       LogService().add('❌ ERRO CRÍTICO NA MIXAGEM: $e');
-      if (mounted) { setState(() { _activeConversation.messages.add(ChatMessage(text: 'Ocorreu um erro no cálculo da IA.', isUser: false)); _isLoading = false; _saveHistory(); }); _scrollToBottom(); }
+      if (mounted) { setState(() { _activeConversation.messages.add(ChatMessage(text: 'Erro no cálculo da IA.', isUser: false)); _isLoading = false; _saveHistory(); }); _scrollToBottom(); }
     }
   }
   
