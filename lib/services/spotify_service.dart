@@ -11,13 +11,30 @@ class SpotifyService {
   factory SpotifyService() => _instance;
   SpotifyService._internal();
 
-  String? _accessToken;
-  bool get isLogged => _accessToken != null;
+  // Variáveis em branco! Nenhuma chave hardcodada mais.
+  String _clientId = '';
+  String _clientSecret = '';
+  String _accessToken = '';
+  bool isLogged = false;
 
-  final String _apiBase = utf8.decode(base64Decode('aHR0cHM6Ly9hcGkuc3BvdGlmeS5jb20vdjE='));
-  final String _accountsDomain = utf8.decode(base64Decode('YWNjb3VudHMuc3BvdGlmeS5jb20='));
+  // Verifica se o usuário já configurou as chaves
+  bool get hasKeys => _clientId.isNotEmpty && _clientSecret.isNotEmpty;
 
-  // --- ADICIONADO: FUNÇÕES DE MEMÓRIA DO TOKEN ---
+  // Função para carregar as chaves do cofre local ao abrir o app
+  Future<void> loadKeys() async {
+    final prefs = await SharedPreferences.getInstance();
+    _clientId = prefs.getString('spotify_client_id') ?? '';
+    _clientSecret = prefs.getString('spotify_client_secret') ?? '';
+  }
+
+  // Função para salvar as chaves que o usuário digitar no popup
+  Future<void> saveKeys(String id, String secret) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('spotify_client_id', id.trim());
+    await prefs.setString('spotify_client_secret', secret.trim());
+    _clientId = id.trim();
+    _clientSecret = secret.trim();
+  }
   
   // Salva o token no navegador
   Future<void> saveToken(String token) async {

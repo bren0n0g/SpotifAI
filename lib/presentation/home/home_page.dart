@@ -124,6 +124,7 @@ class _HomePageState extends State<HomePage> {
     _conversations.insert(0, _activeConversation);
 
     _loadHistory();
+    await SpotifyService().loadKeys();
     SpotifyService().loadSavedToken();
 
     LogService().onNewLog = (String log) {
@@ -165,6 +166,12 @@ class _HomePageState extends State<HomePage> {
   }
 
   void _startCopilot() async {
+    // Coloque isso no começo da _startCopilot() E da _savePlaylist()
+    if (!SpotifyService().hasKeys) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('⚠️ Configure sua Chave de API primeiro!'), backgroundColor: Colors.orangeAccent));
+      Navigator.push(context, MaterialPageRoute(builder: (context) => const TutorialPage()));
+      return;
+    }
     if (!SpotifyService().isLogged) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -1353,6 +1360,12 @@ class _HomePageState extends State<HomePage> {
   }
 
   void _savePlaylist() async {
+    // Coloque isso no começo da _startCopilot() E da _savePlaylist()
+    if (!SpotifyService().hasKeys) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('⚠️ Configure sua Chave de API primeiro!'), backgroundColor: Colors.orangeAccent));
+      Navigator.push(context, MaterialPageRoute(builder: (context) => const TutorialPage()));
+      return;
+    }
     if (_activeConversation.tracks.isEmpty || _isSaving) return;
     if (!SpotifyService().isLogged) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -1491,6 +1504,83 @@ class _HomePageState extends State<HomePage> {
         ],
       ),
     );
+  }
+
+  void _showKeyPopup() {
+    final idController = TextEditingController(text: SpotifyService().clientId); // Se já tiver, mostra
+    final secretController = TextEditingController(text: SpotifyService().clientSecret);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: isDark ? const Color(0xFF2C2C2E) : Colors.white,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Row(
+          children: [
+            const Icon(CupertinoIcons.key_solid, color: Color(0xFF1DB954)),
+            const SizedBox(width: 8),
+            Text('Suas Chaves API', style: TextStyle(color: isDark ? Colors.white : Colors.black, fontSize: 18, fontWeight: FontWeight.bold)),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: idController,
+              style: TextStyle(color: isDark ? Colors.white : Colors.black),
+              decoration: InputDecoration(labelText: 'Client ID', labelStyle: const TextStyle(color: Colors.grey), enabledBorder: const UnderlineInputBorder(borderSide: BorderSide(color: Colors.grey)), focusedBorder: const UnderlineInputBorder(borderSide: BorderSide(color: Color(0xFF1DB954)))),
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: secretController,
+              obscureText: true,
+              style: TextStyle(color: isDark ? Colors.white : Colors.black),
+              decoration: InputDecoration(labelText: 'Client Secret', labelStyle: const TextStyle(color: Colors.grey), enabledBorder: const UnderlineInputBorder(borderSide: BorderSide(color: Colors.grey)), focusedBorder: const UnderlineInputBorder(borderSide: BorderSide(color: Color(0xFF1DB954)))),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context); // Fecha o popup
+              Navigator.push(context, MaterialPageRoute(builder: (context) => const TutorialPage())); // Abre a ajuda
+            }, 
+            child: const Text('Ajuda / Tutorial', style: TextStyle(color: Colors.blueAccent))
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF1DB954), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20))),
+            onPressed: () async {
+              if (idController.text.isNotEmpty && secretController.text.isNotEmpty) {
+                await SpotifyService().saveKeys(idController.text, secretController.text);
+                if (mounted) {
+                  Navigator.pop(context);
+                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Chaves salvas com sucesso!'), backgroundColor: Color(0xFF1DB954)));
+                }
+              }
+            }, 
+            child: const Text('Salvar', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold))
+          ),
+        ],
+      )
+    );
+  }
+
+  // A lógica de Primeira Vez no Menu
+  void _handleKeyButtonClick() async {
+    final prefs = await SharedPreferences.getInstance();
+    bool hasSeenTutorial = prefs.getBool('has_seen_api_tutorial') ?? false;
+
+    if (!hasSeenTutorial) {
+      await prefs.setBool('has_seen_api_tutorial', true);
+      if (mounted) {
+        Navigator.pop(context); // Fecha o Drawer
+        Navigator.push(context, MaterialPageRoute(builder: (context) => const TutorialPage()));
+      }
+    } else {
+      Navigator.pop(context); // Fecha o Drawer
+      _showKeyPopup();
+    }
   }
 
   @override
@@ -1930,6 +2020,30 @@ class _HomePageState extends State<HomePage> {
                 ),
               ),
             ),
+
+            // ... [dentro do _buildPremiumDrawer, logo acima do Conectar Spotify] ...
+
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 4.0), 
+              child: InkWell(
+                borderRadius: BorderRadius.circular(16), 
+                onTap: _handleKeyButtonClick, // Chama a lógica que criamos
+                child: PremiumCard(
+                  color: isDark ? const Color(0xFF2C2C2E) : Colors.grey[200], 
+                  padding: const EdgeInsets.all(16), 
+                  child: Row(
+                    children: [
+                      const Icon(CupertinoIcons.key_solid, color: Colors.orangeAccent), 
+                      const SizedBox(width: 16), 
+                      Text('Colocar Chave API', style: TextStyle(color: isDark ? Colors.white : Colors.black, fontWeight: FontWeight.bold))
+                    ]
+                  )
+                )
+              )
+            ),
+
+            // [Abaixo vem o Padding do Conectar Spotify que já existe...]
+
             Padding(
               padding: const EdgeInsets.only(
                 left: 16.0,
@@ -2329,6 +2443,78 @@ class LogsPage extends StatelessWidget {
           );
         },
       ),
+    );
+  }
+}
+
+// --- PÁGINA DE TUTORIAL BYOK ---
+class TutorialPage extends StatelessWidget {
+  const TutorialPage({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    
+    return Scaffold(
+      backgroundColor: isDark ? Colors.black : Colors.white,
+      appBar: AppBar(
+        title: Text('Como criar sua Chave Spotify', style: TextStyle(color: isDark ? Colors.white : Colors.black, fontWeight: FontWeight.bold)),
+        backgroundColor: isDark ? Colors.black : Colors.white,
+        iconTheme: IconThemeData(color: isDark ? Colors.white : Colors.black),
+        elevation: 0,
+      ),
+      body: ListView(
+        padding: const EdgeInsets.all(24),
+        children: [
+          Text('Liberte o poder do SpotifAI', style: TextStyle(fontSize: 28, fontWeight: FontWeight.w900, color: isDark ? Colors.white : Colors.black)),
+          const SizedBox(height: 16),
+          Text('Para usar a IA sem limites, você precisa conectar o aplicativo diretamente à sua própria conta de desenvolvedor do Spotify. É grátis e leva 2 minutos.', style: TextStyle(fontSize: 16, color: isDark ? Colors.grey[400] : Colors.grey[700])),
+          const SizedBox(height: 32),
+          
+          _buildStep(isDark, '1', 'Acesse o Painel de Desenvolvedor', 'Vá para developer.spotify.com/dashboard e faça login com sua conta normal do Spotify.'),
+          // Exemplo de onde colocar seu print:
+          // Image.asset('assets/images/tutorial_step1.png', height: 200),
+          const SizedBox(height: 24),
+          
+          _buildStep(isDark, '2', 'Crie um App', 'Clique no botão "Create App". Dê o nome de "SpotifAI Personal" e uma descrição qualquer. Na opção "Redirect URI", coloque: http://localhost:8080/ (ou o link do seu site). Marque as caixinhas aceitando os termos e salve.'),
+          const SizedBox(height: 24),
+          
+          _buildStep(isDark, '3', 'Copie suas Chaves', 'Na página do seu novo App, clique em "Settings" (Configurações). Lá você verá o seu "Client ID". Clique em "View Client Secret" para revelar a segunda chave. Copie ambas.'),
+          const SizedBox(height: 24),
+          
+          _buildStep(isDark, '4', 'Cole no SpotifAI', 'Volte para o nosso aplicativo, clique em "Colocar Chave" no menu e cole os dois códigos. Pronto! O app agora é 100% seu.'),
+          
+          const SizedBox(height: 48),
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton(
+              style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF1DB954), padding: const EdgeInsets.symmetric(vertical: 16), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30))),
+              onPressed: () => Navigator.pop(context), 
+              child: const Text('Entendi, vamos lá!', style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold))
+            ),
+          )
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStep(bool isDark, String number, String title, String desc) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        CircleAvatar(backgroundColor: const Color(0xFF1DB954), radius: 16, child: Text(number, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold))),
+        const SizedBox(width: 16),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(title, style: TextStyle(color: isDark ? Colors.white : Colors.black, fontSize: 18, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 4),
+              Text(desc, style: TextStyle(color: isDark ? Colors.grey[400] : Colors.grey[700], fontSize: 14, height: 1.4)),
+            ],
+          ),
+        )
+      ],
     );
   }
 }
