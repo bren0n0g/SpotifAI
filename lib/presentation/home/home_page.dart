@@ -114,6 +114,9 @@ class _HomePageState extends State<HomePage> {
   @override
   void initState() {
     super.initState();
+    SpotifyService().loadKeys().then((_) {
+        SpotifyService().loadSavedToken();
+      });
     _speech = stt.SpeechToText();
     _searchController.addListener(() => setState(() {}));
     _activeConversation = ChatConversation(
@@ -124,8 +127,7 @@ class _HomePageState extends State<HomePage> {
     _conversations.insert(0, _activeConversation);
 
     _loadHistory();
-    await SpotifyService().loadKeys();
-    SpotifyService().loadSavedToken();
+    
 
     LogService().onNewLog = (String log) {
       if (mounted) {
@@ -1518,7 +1520,7 @@ class _HomePageState extends State<HomePage> {
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: Row(
           children: [
-            const Icon(CupertinoIcons.key_solid, color: Color(0xFF1DB954)),
+            const Icon(Icons.vpn_key, color: Color(0xFF1DB954)),
             const SizedBox(width: 8),
             Text('Suas Chaves API', style: TextStyle(color: isDark ? Colors.white : Colors.black, fontSize: 18, fontWeight: FontWeight.bold)),
           ],
@@ -2033,7 +2035,7 @@ class _HomePageState extends State<HomePage> {
                   padding: const EdgeInsets.all(16), 
                   child: Row(
                     children: [
-                      const Icon(CupertinoIcons.key_solid, color: Colors.orangeAccent), 
+                      const Icon(Icons.vpn_key, color: Colors.orangeAccent), 
                       const SizedBox(width: 16), 
                       Text('Colocar Chave API', style: TextStyle(color: isDark ? Colors.white : Colors.black, fontWeight: FontWeight.bold))
                     ]
