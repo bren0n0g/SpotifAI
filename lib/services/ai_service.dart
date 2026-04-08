@@ -140,7 +140,7 @@ class AiService {
   Future<String> _generateTextFromGemini(String prompt) async {
     try {
       final response = await http.post(
-        Uri.parse('$_workerUrl/v1beta/models/gemini-2.5-flash:generateContent'),
+        Uri.parse('$_workerUrl/v1beta/models/gemini-1.5-flash:generateContent'),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({
           "contents": [{
