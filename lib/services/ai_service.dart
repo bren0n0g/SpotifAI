@@ -40,13 +40,10 @@ class AiService {
   O título deve ter até 17 dígitos + " SpotifAI"
   ''';
 
-  /// Geração da Playlist Completa (O Motor Principal)
   Future<Map<String, dynamic>?> generatePlaylist(String prompt) async {
-    LogService().add('🚀 AI: Disparando prompt para a nuvem da Cloudflare...');
-
     try {
       final response = await http.post(
-        Uri.parse('$_workerUrl/v1beta/models/gemini-2.5-flash:generateContent'), 
+        Uri.parse('$_workerUrl/v1beta/models/gemini-3.1-pro:generateContent'), 
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({
           "system_instruction": {
@@ -80,11 +77,11 @@ class AiService {
   /// NOVAS FUNÇÕES: MODO "ESTOU COM SORTE" (COPILOTO GUIADO)
   /// -------------------------------------------------------------------------
 
-  /// Transforma a lista de artistas favoritos do usuário em 6 botões detalhados
+  /// Transforma a lista de artistas favoritos do usuário em 10 botões detalhados
   Future<List<Map<String, dynamic>>> generateDynamicVibes(List<String> topArtists, {String? userHint}) async {
-    // Agora o plano B gera 10 opções para não quebrar a tela
-    final List<Map<String, dynamic>> fallbackVibes = List.generate(10, (index) => {"vibe": "🎧 Vibe Padrão ${index + 1}", "artists": ["Artista 1", "Artista 2", "Artista 3"]});
-    if (topArtists.isEmpty) return fallbackVibes;
+    // 🔥 MUDANÇA: Sem "fallbackVibes" (A boia de salvação falsa). 
+    // Se não tiver artistas, ele trava e lança um erro para a tela vermelha.
+    if (topArtists.isEmpty) throw Exception('Seu histórico do Spotify está vazio ou inacessível.');
 
     String hintInstruction = userHint != null && userHint.isNotEmpty 
         ? "\nREGRA EXTRA DO USUÁRIO: O usuário pediu a seguinte modificação nas opções: '$userHint'. Ajuste as 9 categorias para respeitar estritamente esse pedido." 
@@ -114,12 +111,11 @@ class AiService {
         "artists": (e["artists"] as List).map((a) => a.toString()).toList()
       }).toList();
       
-      // Pega as 10 opções
       if (vibes.length >= 10) return vibes.take(10).toList(); 
-      return fallbackVibes;
+      throw Exception('A IA não gerou as 10 categorias corretamente.');
     } catch (e) {
       LogService().add('❌ ERRO AI: $e');
-      return fallbackVibes;
+      rethrow; // 🔥 Repassa o erro para o Flutter mostrar o aviso na tela e abortar.
     }
   }
 
@@ -132,15 +128,14 @@ class AiService {
       List<dynamic> decodedArray = jsonDecode(responseText);
       return decodedArray.map((e) => e.toString()).toList();
     } catch (e) {
-      return ["Coldplay", "The Weeknd"]; // Fallback de emergência
+      return ["Coldplay", "The Weeknd"]; 
     }
   }
 
-  /// Função interna de apoio para chamadas rápidas e diretas ao Gemini
   Future<String> _generateTextFromGemini(String prompt) async {
     try {
       final response = await http.post(
-        Uri.parse('$_workerUrl/v1beta/models/gemini-1.5-flash:generateContent'),
+        Uri.parse('$_workerUrl/v1beta/models/gemini-3.1-flash:generateContent'),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({
           "contents": [{
