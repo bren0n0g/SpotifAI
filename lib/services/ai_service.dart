@@ -43,7 +43,7 @@ class AiService {
   Future<Map<String, dynamic>?> generatePlaylist(String prompt) async {
     try {
       final response = await http.post(
-        Uri.parse('$_workerUrl/v1beta/models/gemini-2.0-flash:generateContent'), 
+        Uri.parse('$_workerUrl/v1beta/models/gemini-2.5-flash:generateContent'), 
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({
           "system_instruction": {
