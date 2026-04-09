@@ -44,7 +44,7 @@ class AiService {
     try {
       final response = await http.post(
         Uri.parse('$_workerUrl/v1beta/models/gemini-2.5-flash:generateContent'), 
-        headers: {'Content-Type': 'application/json'}, //s
+        headers: {'Content-Type': 'application/json'}, //l
         body: jsonEncode({
           "system_instruction": {
             "parts": [{"text": systemInstruction}]
